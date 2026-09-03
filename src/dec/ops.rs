@@ -2,19 +2,15 @@ use super::core::Dec;
 use std::iter::Sum;
 use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
-// The range is +/-1.7e20 and no price, size or notional lives near it, so an
-// overflow here is a bug rather than a number: bad input, or an accumulation
-// that ran away. Saturating would answer it with a plausible looking figure
-// that survives every downstream check, so the operators panic instead.
-// `checked_*` reports it, `saturating_*` clamps it, for callers who want to
-// decide for themselves.
-#[cold]
-#[inline(never)]
-#[allow(clippy::panic)]
-fn overflowed(operation: &str, lhs: Dec, rhs: Dec) -> ! {
-    panic!("Dec {operation} overflowed: {lhs}, {rhs}")
-}
-
+/// The product, or [`Dec::NAN`] on overflow or from a NaN operand.
+///
+/// The finite range is +/-1.7e20 and no price, size or notional lives near it,
+/// so an overflow here is a bug rather than a number: bad input, or an
+/// accumulation that ran away. Saturating would answer it with a plausible
+/// looking figure that survives every downstream check, so the operators
+/// return NaN instead and carry the fault to wherever the result is finally
+/// examined. [`Dec::checked_mul`] reports it, [`Dec::saturating_mul`] clamps
+/// it, for callers who would rather decide on the spot.
 impl Mul for Dec {
     type Output = Self;
 
@@ -22,7 +18,7 @@ impl Mul for Dec {
     fn mul(self, rhs: Self) -> Self {
         match self.checked_mul(rhs) {
             Some(value) => value,
-            None => overflowed("multiplication", self, rhs),
+            None => Self::NAN,
         }
     }
 }
@@ -34,39 +30,42 @@ impl MulAssign for Dec {
     }
 }
 
-// exact and total: the range is symmetric, so every value has a negation
+/// Negation, which is exact and total: the finite range is symmetric, so every
+/// value has a negation, and the NaN pattern is its own.
 impl Neg for Dec {
     type Output = Self;
 
     #[inline(always)]
     fn neg(self) -> Self {
-        Self(-self.0)
+        Self(self.0.wrapping_neg())
     }
 }
 
+/// The sum, or [`Dec::NAN`] on overflow or from a NaN operand. See
+/// [`Dec::checked_add`] and [`Dec::saturating_add`] to handle it on the spot.
 impl Add for Dec {
     type Output = Self;
 
     #[inline(always)]
     fn add(self, rhs: Self) -> Self {
-        debug_assert!(
-            self.checked_add(rhs).is_some(),
-            "Dec addition overflowed: {self} + {rhs}"
-        );
-        self.saturating_add(rhs)
+        match self.checked_add(rhs) {
+            Some(value) => value,
+            None => Self::NAN,
+        }
     }
 }
 
+/// The difference, or [`Dec::NAN`] on overflow or from a NaN operand. See
+/// [`Dec::checked_sub`] and [`Dec::saturating_sub`] to handle it on the spot.
 impl Sub for Dec {
     type Output = Self;
 
     #[inline(always)]
     fn sub(self, rhs: Self) -> Self {
-        debug_assert!(
-            self.checked_sub(rhs).is_some(),
-            "Dec subtraction overflowed: {self} - {rhs}"
-        );
-        self.saturating_sub(rhs)
+        match self.checked_sub(rhs) {
+            Some(value) => value,
+            None => Self::NAN,
+        }
     }
 }
 
@@ -147,22 +146,25 @@ mod conversions {
 
     #[test]
     fn test_raw_round_trip() {
-        assert_eq!(Dec::from_raw(dec!(1.5).into_raw()), Some(dec!(1.5)));
+        assert_eq!(Dec::from_raw(dec!(1.5).into_raw()), dec!(1.5));
         assert_eq!(Dec::ONE.into_raw(), 1_000_000_000_000_000_000);
     }
 
     #[test]
-    fn test_i128_min_is_the_one_raw_outside_the_range() {
-        assert_eq!(Dec::from_raw(i128::MIN), None);
-        assert_eq!(Dec::from_raw(i128::MAX), Some(Dec::MAX));
-        assert_eq!(Dec::from_raw(Dec::MIN.into_raw()), Some(Dec::MIN));
-
-        assert_eq!(Dec::from_raw_saturating(i128::MIN), Dec::MIN);
-        assert_eq!(Dec::from_raw_saturating(i128::MAX), Dec::MAX);
+    fn test_the_reserved_pattern_is_nan() {
+        assert_eq!(Dec::from_raw(i128::MIN), Dec::NAN);
+        assert_eq!(Dec::from_raw(i128::MAX), Dec::MAX);
+        assert!(Dec::NAN.is_nan());
+        assert!(!Dec::NAN.is_finite());
+        assert!(Dec::MIN.is_finite());
+        assert!(Dec::MAX.is_finite());
+        assert!(!Dec::NAN.is_sign_negative());
+        assert!(!Dec::NAN.is_sign_positive());
+        assert!(!Dec::NAN.is_zero());
     }
 
     #[test]
-    fn test_the_range_is_symmetric() {
+    fn test_the_finite_range_is_symmetric() {
         assert_eq!(-Dec::MIN, Dec::MAX);
         assert_eq!(-Dec::MAX, Dec::MIN);
         assert_eq!(Dec::MIN.into_raw(), -Dec::MAX.into_raw());
@@ -220,24 +222,57 @@ mod arithmetic_methods {
 
     // saturating would answer an overflow with a plausible looking figure
     #[test]
-    #[should_panic(expected = "Dec multiplication overflowed")]
-    fn test_the_multiplication_operator_panics_on_overflow() {
-        let _ = Dec::MAX * dec!(2);
+    fn test_overflow_becomes_nan() {
+        assert!((Dec::MAX * dec!(2)).is_nan());
+        assert!((Dec::MAX * Dec::MAX).is_nan());
+        assert!((Dec::MAX + Dec::ONE).is_nan());
+        assert!((Dec::MIN - Dec::ONE).is_nan());
     }
 
-    // addition and subtraction check only in debug, keeping the hot path branchless
-    #[cfg(debug_assertions)]
     #[test]
-    #[should_panic(expected = "Dec addition overflowed")]
-    fn test_the_addition_operator_panics_on_overflow_in_debug() {
-        let _ = Dec::MAX + Dec::ONE;
+    fn test_nan_propagates_through_every_operation() {
+        for value in [dec!(1), dec!(-1), Dec::ZERO, Dec::MAX, Dec::MIN] {
+            assert!((Dec::NAN + value).is_nan(), "{value} + NaN");
+            assert!((value + Dec::NAN).is_nan(), "NaN + {value}");
+            assert!((Dec::NAN - value).is_nan(), "NaN - {value}");
+            assert!((value - Dec::NAN).is_nan(), "{value} - NaN");
+            assert!((Dec::NAN * value).is_nan(), "NaN * {value}");
+            assert!((value * Dec::NAN).is_nan(), "{value} * NaN");
+            assert!(Dec::NAN.midpoint(value).is_nan());
+            assert!(Dec::NAN.saturating_add(value).is_nan());
+            assert!(Dec::NAN.saturating_sub(value).is_nan());
+            assert!(Dec::NAN.saturating_mul(value).is_nan());
+            assert_eq!(Dec::NAN.checked_add(value), None);
+            assert_eq!(Dec::NAN.checked_sub(value), None);
+            assert_eq!(Dec::NAN.checked_mul(value), None);
+        }
+        assert!((-Dec::NAN).is_nan());
+        assert!(Dec::NAN.abs().is_nan());
+        assert!(Dec::NAN.signum().is_nan());
+        assert!(Dec::NAN.floor().is_nan());
+        assert!(Dec::NAN.ceil().is_nan());
+        assert!(Dec::NAN.trunc().is_nan());
     }
 
-    #[cfg(debug_assertions)]
+    // NaN times zero is still NaN: the fault outranks the annihilator
     #[test]
-    #[should_panic(expected = "Dec subtraction overflowed")]
-    fn test_the_subtraction_operator_panics_on_overflow_in_debug() {
-        let _ = Dec::MIN - Dec::ONE;
+    fn test_nan_times_zero_is_nan() {
+        assert!((Dec::NAN * Dec::ZERO).is_nan());
+        assert!((Dec::ZERO * Dec::NAN).is_nan());
+    }
+
+    #[test]
+    fn test_nan_formats_orders_and_converts() {
+        assert_eq!(Dec::NAN.to_string(), "NaN");
+        assert_eq!(format!("{:?}", Dec::NAN), "NaN");
+        assert!(Dec::NAN.to_f64().is_nan());
+        // unlike an IEEE NaN this one is reflexive, which keeps Eq and Ord
+        assert_eq!(Dec::NAN, Dec::NAN);
+        assert!(Dec::NAN < Dec::MIN);
+        assert_eq!(
+            [Dec::ZERO, Dec::NAN, Dec::MIN].iter().min(),
+            Some(&Dec::NAN)
+        );
     }
 
     #[test]

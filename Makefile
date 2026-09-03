@@ -13,6 +13,14 @@ rs-lint:		## Lint rust code
 rs-test:		## Run rust tests with all features
 	@cargo test --all-features
 
+.PHONY: docs
+docs:			## build the rust documentation
+	@cargo doc --all-features --no-deps
+
+.PHONY: docs-open
+docs-open:		## build the rust documentation and open it in the browser
+	@cargo doc --all-features --no-deps --open
+
 .PHONY: rs-publish
 rs-publish:		## publish the crate to crates.io
 	@cargo publish --token $(CARGO_REGISTRY_TOKEN)

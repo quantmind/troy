@@ -1,22 +1,52 @@
-use super::core::{Dec, MAX_RAW, ONE_U, POW10, clamp_raw, div_round};
+use super::core::{Dec, MAX_RAW, NAN_RAW, ONE_U, POW10, dec_or_nan, div_round};
 
 impl Dec {
-        #[inline(always)]
+    /// [`Dec::from_f64`] followed by [`Dec::round_dp`], which is how a float
+    /// carrying binary representation error is best pinned to a known scale.
+    #[inline(always)]
     pub fn from_f64_round(value: f64, dp: u32) -> Option<Self> {
         Self::from_f64(value).map(|value| value.round_dp(dp))
     }
 
+    /// Round to `dp` decimal places, halves away from zero. A no-op once `dp`
+    /// reaches [`Dec::SCALE`]. Returns [`Dec::NAN`] when the rounded value
+    /// leaves the finite range, as it does for [`Dec::MIN`] at `dp` 0, and
+    /// when the input is already NaN.
+    ///
+    /// ```
+    /// use troy::{Dec, dec};
+    ///
+    /// assert_eq!(dec!(2.5).round_dp(0), dec!(3));
+    /// assert_eq!(dec!(-2.5).round_dp(0), dec!(-3));
+    /// assert!(Dec::MAX.round_dp(0).is_nan());
+    /// ```
     #[inline(always)]
     pub const fn round_dp(self, dp: u32) -> Self {
         if dp >= Dec::SCALE {
+            // a no-op at the native scale, NaN included
             return self;
         }
+        if self.is_nan() {
+            return Self::NAN;
+        }
         let factor = POW10[(Dec::SCALE - dp) as usize];
-        Self(clamp_raw(div_round(self.0, factor).saturating_mul(factor)))
+        dec_or_nan(div_round(self.0, factor).checked_mul(factor))
     }
 
+    /// Round to the nearest multiple of `step`, halves away from zero. A
+    /// non-positive step is a no-op. Returns [`Dec::NAN`] when the result
+    /// leaves the finite range, and when either side is already NaN.
+    ///
+    /// ```
+    /// use troy::dec;
+    ///
+    /// assert_eq!(dec!(104_237.28).round_to_step(dec!(0.25)), dec!(104_237.25));
+    /// ```
     #[inline(always)]
     pub const fn round_to_step(self, step: Self) -> Self {
+        if self.is_nan() || step.is_nan() {
+            return Self::NAN;
+        }
         if step.0 <= 0 {
             return self;
         }
@@ -24,7 +54,7 @@ impl Dec {
             Some(exponent) if exponent <= Dec::SCALE => {
                 Self(round_to_places(self.0, Dec::SCALE - exponent))
             }
-            _ => Self(clamp_raw(div_round(self.0, step.0).saturating_mul(step.0))),
+            _ => dec_or_nan(div_round(self.0, step.0).checked_mul(step.0)),
         }
     }
 }
@@ -60,12 +90,13 @@ const fn round_to_places(raw: i128, dp: u32) -> i128 {
         },
         None => u128::MAX,
     };
-    // the range is symmetric, so one limit serves both signs
-    let limit = MAX_RAW as u128;
-    let clamped = if scaled > limit { limit } else { scaled };
+    // the finite range is symmetric, so one limit serves both signs
+    if scaled > MAX_RAW as u128 {
+        return NAN_RAW;
+    }
     match raw < 0 {
-        true => -(clamped as i128),
-        false => clamped as i128,
+        true => -(scaled as i128),
+        false => scaled as i128,
     }
 }
 
@@ -130,7 +161,7 @@ mod round_to_step {
     fn test_powers_of_ten_match_round_dp() {
         for value in VALUES {
             for dp in 0..=Dec::SCALE {
-                let step = Dec::from_raw(POW10[(Dec::SCALE - dp) as usize]).unwrap();
+                let step = Dec::from_raw(POW10[(Dec::SCALE - dp) as usize]);
                 assert_eq!(
                     value.round_to_step(step),
                     value.round_dp(dp),
@@ -177,11 +208,20 @@ mod round_to_step {
     }
 
     #[test]
-    fn test_the_extremes_saturate() {
-        assert_eq!(Dec::MAX.round_to_step(Dec::ONE), Dec::MAX);
-        assert_eq!(Dec::MIN.round_to_step(Dec::ONE), Dec::MIN);
-        assert_eq!(Dec::MAX.round_to_step(dec!(0.25)), Dec::MAX);
-        assert_eq!(Dec::MIN.round_to_step(dec!(0.25)), Dec::MIN);
+    fn test_the_extremes_become_nan() {
+        assert!(Dec::MAX.round_to_step(Dec::ONE).is_nan());
+        assert!(Dec::MIN.round_to_step(Dec::ONE).is_nan());
+        assert!(Dec::MAX.round_to_step(dec!(0.25)).is_nan());
+        assert!(Dec::MIN.round_to_step(dec!(0.25)).is_nan());
+    }
+
+    #[test]
+    fn test_nan_survives_both_rounding_paths() {
+        assert!(Dec::NAN.round_to_step(Dec::ONE).is_nan());
+        assert!(Dec::NAN.round_to_step(dec!(0.25)).is_nan());
+        assert!(dec!(1.5).round_to_step(Dec::NAN).is_nan());
+        assert!(Dec::NAN.round_dp(2).is_nan());
+        assert!(Dec::NAN.round_dp(Dec::SCALE).is_nan());
     }
 
     #[test]

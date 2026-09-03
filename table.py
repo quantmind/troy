@@ -11,7 +11,7 @@ COLUMNS = ["f64", "Dec", "rust_decimal", "fastnum"]
 
 
 def run() -> str:
-    command = ["cargo", "bench", "-p", "bpt-dec", "--bench", "arithmetic"]
+    command = ["cargo", "bench", "--bench", "arithmetic"]
     command += sys.argv[1:]
     print(" ".join(command), file=sys.stderr)
     result = subprocess.run(command, capture_output=True, text=True)
