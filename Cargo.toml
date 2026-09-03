@@ -1,0 +1,42 @@
+[package]
+name = "troy"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.87"
+description = "A fixed-scale decimal type for fast, exact arithmetic"
+repository = "https://github.com/quantmind/troy"
+license = "MIT OR Apache-2.0"
+readme = "readme.md"
+keywords = ["decimal", "fixed-point", "numeric", "finance"]
+categories = ["mathematics", "data-structures"]
+publish = true
+
+[lib]
+name = "troy"
+path = "src/mod.rs"
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[dependencies]
+rust_decimal = { version = "1.43", optional = true }
+serde = { version = "1.0", optional = true }
+
+[dev-dependencies]
+criterion = "0.8"
+fastnum = "0.7.5"
+rust_decimal = "1.43"
+serde_json = "1.0"
+
+[features]
+default = []
+rust_decimal = ["dep:rust_decimal"]
+serde = ["dep:serde"]
+
+[[bench]]
+name = "arithmetic"
+harness = false

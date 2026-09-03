@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+FMT_ARG="--check"
+CLIPPY_ARG="-- -Dwarnings"
+
+if [ "$1" = "fix" ] ; then
+    FMT_ARG=""
+fi
+
+
+cargo fmt ${FMT_ARG}
+cargo clippy ${CLIPPY_ARG}
