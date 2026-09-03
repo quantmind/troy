@@ -11,13 +11,13 @@ impl Dec {
         if scale <= Dec::SCALE {
             return mantissa
                 .checked_mul(POW10[(Dec::SCALE - scale) as usize])
-                .map(Self::from_raw);
+                .and_then(Self::from_raw);
         }
         let factor = match POW10.get((scale - Dec::SCALE) as usize) {
             Some(factor) => *factor,
             None => return Some(Self::ZERO),
         };
-        Some(Self::from_raw(div_round(mantissa, factor)))
+        Self::from_raw(div_round(mantissa, factor))
     }
 
     /// Widen to a [`Decimal`] at [`Dec::SCALE`] decimal places, or `None` when the

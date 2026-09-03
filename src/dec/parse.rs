@@ -1,4 +1,4 @@
-use super::core::{Dec, POW10};
+use super::core::{Dec, MAX_RAW, POW10};
 use std::fmt;
 use std::str::FromStr;
 
@@ -134,14 +134,12 @@ pub(crate) const fn parse_bytes(bytes: &[u8]) -> Result<i128, ParseDecError> {
     } else {
         div_round_u128(magnitude, POW10[(-shift) as usize] as u128)
     };
-    // a negative may reach 2^127, the magnitude of Dec::MIN, which wrapping_neg
-    // maps onto i128::MIN; a positive stops one short of it
-    let limit = i128::MAX as u128 + negative as u128;
-    if scaled > limit {
+    // the range is symmetric, so one limit serves both signs
+    if scaled > MAX_RAW as u128 {
         return Err(ParseDecError::Overflow);
     }
     Ok(match negative {
-        true => (scaled as i128).wrapping_neg(),
+        true => -(scaled as i128),
         false => scaled as i128,
     })
 }
@@ -215,11 +213,11 @@ mod errors {
     fn test_const_parsing_reports_failure_without_panicking() {
         assert_eq!(
             Dec::parse_const("1.5"),
-            Some(Dec::from_raw(1_500_000_000_000_000_000))
+            Dec::from_raw(1_500_000_000_000_000_000)
         );
         assert_eq!(
             Dec::parse_const("-0.25"),
-            Some(Dec::from_raw(-250_000_000_000_000_000))
+            Dec::from_raw(-250_000_000_000_000_000)
         );
         assert_eq!(Dec::parse_const(""), None);
         assert_eq!(Dec::parse_const("1.2.3"), None);

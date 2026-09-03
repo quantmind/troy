@@ -1,6 +1,20 @@
-use super::core::{Dec, ONE_U, POW10, div_round};
+use super::core::{Dec, MAX_RAW, ONE_U, POW10, clamp_raw, div_round};
 
 impl Dec {
+        #[inline(always)]
+    pub fn from_f64_round(value: f64, dp: u32) -> Option<Self> {
+        Self::from_f64(value).map(|value| value.round_dp(dp))
+    }
+
+    #[inline(always)]
+    pub const fn round_dp(self, dp: u32) -> Self {
+        if dp >= Dec::SCALE {
+            return self;
+        }
+        let factor = POW10[(Dec::SCALE - dp) as usize];
+        Self(clamp_raw(div_round(self.0, factor).saturating_mul(factor)))
+    }
+
     #[inline(always)]
     pub const fn round_to_step(self, step: Self) -> Self {
         if step.0 <= 0 {
@@ -10,7 +24,7 @@ impl Dec {
             Some(exponent) if exponent <= Dec::SCALE => {
                 Self(round_to_places(self.0, Dec::SCALE - exponent))
             }
-            _ => Self(div_round(self.0, step.0).saturating_mul(step.0)),
+            _ => Self(clamp_raw(div_round(self.0, step.0).saturating_mul(step.0))),
         }
     }
 }
@@ -46,12 +60,11 @@ const fn round_to_places(raw: i128, dp: u32) -> i128 {
         },
         None => u128::MAX,
     };
-    // a negative may reach 2^127, the magnitude of Dec::MIN, which wrapping_neg
-    // maps onto i128::MIN; a positive stops one short of it
-    let limit = i128::MAX as u128 + (raw < 0) as u128;
+    // the range is symmetric, so one limit serves both signs
+    let limit = MAX_RAW as u128;
     let clamped = if scaled > limit { limit } else { scaled };
     match raw < 0 {
-        true => (clamped as i128).wrapping_neg(),
+        true => -(clamped as i128),
         false => clamped as i128,
     }
 }
@@ -117,7 +130,7 @@ mod round_to_step {
     fn test_powers_of_ten_match_round_dp() {
         for value in VALUES {
             for dp in 0..=Dec::SCALE {
-                let step = Dec::from_raw(POW10[(Dec::SCALE - dp) as usize]);
+                let step = Dec::from_raw(POW10[(Dec::SCALE - dp) as usize]).unwrap();
                 assert_eq!(
                     value.round_to_step(step),
                     value.round_dp(dp),

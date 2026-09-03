@@ -2,12 +2,28 @@ use super::core::Dec;
 use std::iter::Sum;
 use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
+// The range is +/-1.7e20 and no price, size or notional lives near it, so an
+// overflow here is a bug rather than a number: bad input, or an accumulation
+// that ran away. Saturating would answer it with a plausible looking figure
+// that survives every downstream check, so the operators panic instead.
+// `checked_*` reports it, `saturating_*` clamps it, for callers who want to
+// decide for themselves.
+#[cold]
+#[inline(never)]
+#[allow(clippy::panic)]
+fn overflowed(operation: &str, lhs: Dec, rhs: Dec) -> ! {
+    panic!("Dec {operation} overflowed: {lhs}, {rhs}")
+}
+
 impl Mul for Dec {
     type Output = Self;
 
     #[inline(always)]
     fn mul(self, rhs: Self) -> Self {
-        self.saturating_mul(rhs)
+        match self.checked_mul(rhs) {
+            Some(value) => value,
+            None => overflowed("multiplication", self, rhs),
+        }
     }
 }
 
@@ -18,12 +34,13 @@ impl MulAssign for Dec {
     }
 }
 
+// exact and total: the range is symmetric, so every value has a negation
 impl Neg for Dec {
     type Output = Self;
 
     #[inline(always)]
     fn neg(self) -> Self {
-        Self(self.0.saturating_neg())
+        Self(-self.0)
     }
 }
 
@@ -32,6 +49,10 @@ impl Add for Dec {
 
     #[inline(always)]
     fn add(self, rhs: Self) -> Self {
+        debug_assert!(
+            self.checked_add(rhs).is_some(),
+            "Dec addition overflowed: {self} + {rhs}"
+        );
         self.saturating_add(rhs)
     }
 }
@@ -41,6 +62,10 @@ impl Sub for Dec {
 
     #[inline(always)]
     fn sub(self, rhs: Self) -> Self {
+        debug_assert!(
+            self.checked_sub(rhs).is_some(),
+            "Dec subtraction overflowed: {self} - {rhs}"
+        );
         self.saturating_sub(rhs)
     }
 }
@@ -122,8 +147,25 @@ mod conversions {
 
     #[test]
     fn test_raw_round_trip() {
-        assert_eq!(Dec::from_raw(dec!(1.5).into_raw()), dec!(1.5));
+        assert_eq!(Dec::from_raw(dec!(1.5).into_raw()), Some(dec!(1.5)));
         assert_eq!(Dec::ONE.into_raw(), 1_000_000_000_000_000_000);
+    }
+
+    #[test]
+    fn test_i128_min_is_the_one_raw_outside_the_range() {
+        assert_eq!(Dec::from_raw(i128::MIN), None);
+        assert_eq!(Dec::from_raw(i128::MAX), Some(Dec::MAX));
+        assert_eq!(Dec::from_raw(Dec::MIN.into_raw()), Some(Dec::MIN));
+
+        assert_eq!(Dec::from_raw_saturating(i128::MIN), Dec::MIN);
+        assert_eq!(Dec::from_raw_saturating(i128::MAX), Dec::MAX);
+    }
+
+    #[test]
+    fn test_the_range_is_symmetric() {
+        assert_eq!(-Dec::MIN, Dec::MAX);
+        assert_eq!(-Dec::MAX, Dec::MIN);
+        assert_eq!(Dec::MIN.into_raw(), -Dec::MAX.into_raw());
     }
 }
 
@@ -171,9 +213,31 @@ mod arithmetic_methods {
         value -= dec!(2);
         assert_eq!(value, dec!(-0.5));
 
-        let mut saturating = Dec::MAX;
-        saturating += Dec::ONE;
-        assert_eq!(saturating, Dec::MAX);
+        let mut product = dec!(3);
+        product *= dec!(4);
+        assert_eq!(product, dec!(12));
+    }
+
+    // saturating would answer an overflow with a plausible looking figure
+    #[test]
+    #[should_panic(expected = "Dec multiplication overflowed")]
+    fn test_the_multiplication_operator_panics_on_overflow() {
+        let _ = Dec::MAX * dec!(2);
+    }
+
+    // addition and subtraction check only in debug, keeping the hot path branchless
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "Dec addition overflowed")]
+    fn test_the_addition_operator_panics_on_overflow_in_debug() {
+        let _ = Dec::MAX + Dec::ONE;
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "Dec subtraction overflowed")]
+    fn test_the_subtraction_operator_panics_on_overflow_in_debug() {
+        let _ = Dec::MIN - Dec::ONE;
     }
 
     #[test]

@@ -1,4 +1,4 @@
-use super::core::ONE_U;
+use super::core::{MAX_RAW, ONE_U};
 
 const ONE_64: u64 = 1_000_000_000_000_000_000;
 
@@ -69,13 +69,14 @@ fn mul_frac(a: u64, b: u64) -> (u64, u64) {
 
 #[inline(always)]
 fn signed(negative: bool, magnitude: u128) -> Option<i128> {
-    match negative {
-        true => match magnitude <= i128::MAX as u128 {
-            true => Some(-(magnitude as i128)),
-            false => None,
-        },
-        false => i128::try_from(magnitude).ok(),
+    // the range is symmetric, so one limit serves both signs
+    if magnitude > MAX_RAW as u128 {
+        return None;
     }
+    Some(match negative {
+        true => -(magnitude as i128),
+        false => magnitude as i128,
+    })
 }
 
 #[cfg(test)]
@@ -126,7 +127,7 @@ mod multiply {
         let fine = Dec::from_str("0.0000000001").unwrap();
         assert!(div_exact_1e9(fine.into_raw().unsigned_abs()).is_none());
         assert_eq!(fine * dec!(3), Dec::from_str("0.0000000003").unwrap());
-        assert_eq!(Dec::EPSILON * dec!(1000), Dec::from_raw(1_000));
+        assert_eq!(Dec::EPSILON * dec!(1000), Dec::from_raw(1_000).unwrap());
     }
 
     #[test]
@@ -159,7 +160,8 @@ mod multiply {
         assert_eq!(dec!(7.5) * Dec::ZERO, Dec::ZERO);
         assert_eq!(dec!(7.5) * Dec::NEG_ONE, dec!(-7.5));
         assert_eq!(Dec::MAX.checked_mul(Dec::MAX), None);
-        assert_eq!(Dec::MAX * dec!(-2), Dec::MIN);
+        assert_eq!(Dec::MAX.checked_mul(dec!(-2)), None);
+        assert_eq!(Dec::MAX.saturating_mul(dec!(-2)), Dec::MIN);
 
         let mut value = dec!(3);
         value *= dec!(4);

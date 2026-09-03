@@ -109,7 +109,7 @@ mod formatting_bounds {
     fn test_the_widest_values_format() {
         assert_eq!(
             Dec::MIN.to_string(),
-            "-170141183460469231731.687303715884105728"
+            "-170141183460469231731.687303715884105727"
         );
         assert_eq!(
             Dec::MAX.to_string(),

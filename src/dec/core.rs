@@ -5,6 +5,30 @@ pub(crate) const ONE_RAW: i128 = 1_000_000_000_000_000_000;
 
 pub(crate) const ONE_U: u128 = 1_000_000_000_000_000_000;
 
+pub(crate) const MAX_RAW: i128 = i128::MAX;
+
+// i128::MIN has no positive counterpart, so admitting it would make negation
+// and abs partial and force a 2^127 special case into every magnitude check.
+// Reserving it costs one value in 2^128 and buys a symmetric range.
+pub(crate) const MIN_RAW: i128 = -i128::MAX;
+
+// i128::MIN is the only raw outside the range, so one compare settles it
+#[inline(always)]
+pub(crate) const fn clamp_raw(raw: i128) -> i128 {
+    match raw < MIN_RAW {
+        true => MIN_RAW,
+        false => raw,
+    }
+}
+
+#[inline(always)]
+pub(crate) const fn check_raw(raw: i128) -> Option<i128> {
+    match raw < MIN_RAW {
+        true => None,
+        false => Some(raw),
+    }
+}
+
 const CHUNK_F64: f64 = 1e9;
 
 pub(crate) const POW10: [i128; 39] = {
@@ -27,13 +51,24 @@ impl Dec {
     pub const ZERO: Self = Self(0);
     pub const ONE: Self = Self(ONE_RAW);
     pub const NEG_ONE: Self = Self(-ONE_RAW);
-    pub const MIN: Self = Self(i128::MIN);
-    pub const MAX: Self = Self(i128::MAX);
+    pub const MIN: Self = Self(MIN_RAW);
+    pub const MAX: Self = Self(MAX_RAW);
     pub const EPSILON: Self = Self(1);
 
+    /// Wrap a raw scaled integer, or `None` for `i128::MIN`, the one value
+    /// outside the range. Every raw that [`Dec::into_raw`] returns round trips.
     #[inline(always)]
-    pub const fn from_raw(raw: i128) -> Self {
-        Self(raw)
+    pub const fn from_raw(raw: i128) -> Option<Self> {
+        match check_raw(raw) {
+            Some(raw) => Some(Self(raw)),
+            None => None,
+        }
+    }
+
+    /// Wrap a raw scaled integer, clamping `i128::MIN` to [`Dec::MIN`].
+    #[inline(always)]
+    pub const fn from_raw_saturating(raw: i128) -> Self {
+        Self(clamp_raw(raw))
     }
 
     #[inline(always)]
@@ -115,48 +150,38 @@ impl Dec {
         (integer as i128)
             .checked_mul(ONE_RAW)?
             .checked_add(trim_f64_noise(fraction) as i128)
+            .and_then(check_raw)
             .map(Self)
     }
 
     #[inline(always)]
-    pub fn from_f64_round(value: f64, dp: u32) -> Option<Self> {
-        Self::from_f64(value).map(|value| value.round_dp(dp))
-    }
-
-    #[inline(always)]
-    pub const fn round_dp(self, dp: u32) -> Self {
-        if dp >= Dec::SCALE {
-            return self;
-        }
-        let factor = POW10[(Dec::SCALE - dp) as usize];
-        Self(div_round(self.0, factor).saturating_mul(factor))
-    }
-
-    #[inline(always)]
     pub const fn floor(self) -> Self {
-        Self(self.0.div_euclid(ONE_RAW).saturating_mul(ONE_RAW))
+        Self(clamp_raw(
+            self.0.div_euclid(ONE_RAW).saturating_mul(ONE_RAW),
+        ))
     }
 
     #[inline(always)]
     pub const fn ceil(self) -> Self {
-        Self(
+        // the leading negation is exact: the range is symmetric
+        Self(clamp_raw(
             self.0
                 .saturating_neg()
                 .div_euclid(ONE_RAW)
                 .saturating_mul(ONE_RAW)
                 .saturating_neg(),
-        )
+        ))
     }
 
     #[inline(always)]
     pub const fn trunc(self) -> Self {
-        Self((self.0 / ONE_RAW).saturating_mul(ONE_RAW))
+        Self(clamp_raw((self.0 / ONE_RAW).saturating_mul(ONE_RAW)))
     }
 
     #[inline(always)]
     pub const fn checked_add(self, rhs: Self) -> Option<Self> {
         match self.0.checked_add(rhs.0) {
-            Some(raw) => Some(Self(raw)),
+            Some(raw) => Self::from_raw(raw),
             None => None,
         }
     }
@@ -164,7 +189,7 @@ impl Dec {
     #[inline(always)]
     pub const fn checked_sub(self, rhs: Self) -> Option<Self> {
         match self.0.checked_sub(rhs.0) {
-            Some(raw) => Some(Self(raw)),
+            Some(raw) => Self::from_raw(raw),
             None => None,
         }
     }
@@ -187,12 +212,12 @@ impl Dec {
 
     #[inline(always)]
     pub const fn saturating_add(self, rhs: Self) -> Self {
-        Self(self.0.saturating_add(rhs.0))
+        Self(clamp_raw(self.0.saturating_add(rhs.0)))
     }
 
     #[inline(always)]
     pub const fn saturating_sub(self, rhs: Self) -> Self {
-        Self(self.0.saturating_sub(rhs.0))
+        Self(clamp_raw(self.0.saturating_sub(rhs.0)))
     }
 
     // cannot overflow: the sum is formed in a wider space than either operand.
@@ -294,7 +319,7 @@ mod tests {
         );
         assert_eq!(
             Dec::from_str("0.0000000000000000015").unwrap(),
-            Dec::from_raw(2)
+            Dec::from_raw(2).unwrap()
         );
     }
 
@@ -302,7 +327,7 @@ mod tests {
     fn test_parse_exponent_form() {
         assert_eq!(
             Dec::from_str("1e-8").unwrap(),
-            Dec::from_raw(10_000_000_000)
+            Dec::from_raw(10_000_000_000).unwrap()
         );
         assert_eq!(
             Dec::from_str("1.5E3").unwrap(),
@@ -325,7 +350,7 @@ mod tests {
     fn test_macro_is_const() {
         const HALF: Dec = dec!(0.5);
         const NEGATIVE: Dec = dec!(-1.25);
-        assert_eq!(HALF, Dec::from_raw(500_000_000_000_000_000));
+        assert_eq!(HALF, Dec::from_raw(500_000_000_000_000_000).unwrap());
         assert_eq!(NEGATIVE.to_string(), "-1.25");
     }
 
@@ -388,9 +413,11 @@ mod tests {
     }
 
     #[test]
-    fn test_operators_saturate_instead_of_overflowing() {
-        assert_eq!(Dec::MAX + Dec::ONE, Dec::MAX);
-        assert_eq!(Dec::MIN - Dec::ONE, Dec::MIN);
+    fn test_overflow_is_reported_or_clamped_on_request() {
+        assert_eq!(Dec::MAX.checked_add(Dec::ONE), None);
+        assert_eq!(Dec::MIN.checked_sub(Dec::ONE), None);
+        assert_eq!(Dec::MAX.saturating_add(Dec::ONE), Dec::MAX);
+        assert_eq!(Dec::MIN.saturating_sub(Dec::ONE), Dec::MIN);
     }
 
     #[test]
@@ -468,12 +495,16 @@ mod midpoint {
     #[test]
     fn test_midpoint_of_an_odd_last_place_rounds_towards_zero() {
         assert_eq!(
-            Dec::from_raw(1).midpoint(Dec::from_raw(2)),
             Dec::from_raw(1)
+                .unwrap()
+                .midpoint(Dec::from_raw(2).unwrap()),
+            Dec::from_raw(1).unwrap()
         );
         assert_eq!(
-            Dec::from_raw(-1).midpoint(Dec::from_raw(-2)),
             Dec::from_raw(-1)
+                .unwrap()
+                .midpoint(Dec::from_raw(-2).unwrap()),
+            Dec::from_raw(-1).unwrap()
         );
     }
 }
@@ -653,7 +684,7 @@ mod to_f64_accuracy {
             let scale = POW10[(state % 10) as usize];
             let sign = if state & 1 == 0 { 1 } else { -1 };
             let raw = ((state as i128) * scale).saturating_mul(sign);
-            worst = worst.max(ulps_from_truth(Dec::from_raw(raw)));
+            worst = worst.max(ulps_from_truth(Dec::from_raw(raw).unwrap()));
         }
         assert!(worst <= 1, "drifted {worst} ulp from the nearest f64");
     }
