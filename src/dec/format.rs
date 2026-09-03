@@ -85,6 +85,9 @@ fn render(buffer: &mut [u8; BUFFER_LEN], raw: i128) -> usize {
 impl fmt::Display for Dec {
     #[inline(always)]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.is_nan() {
+            return f.write_str("NaN");
+        }
         let mut buffer = [0_u8; BUFFER_LEN];
         let length = render(&mut buffer, self.0);
         f.write_str(std::str::from_utf8(&buffer[..length]).unwrap_or(""))

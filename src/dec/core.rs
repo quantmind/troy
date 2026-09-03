@@ -7,17 +7,33 @@ pub(crate) const ONE_U: u128 = 1_000_000_000_000_000_000;
 
 pub(crate) const MAX_RAW: i128 = i128::MAX;
 
-// i128::MIN has no positive counterpart, so admitting it would make negation
-// and abs partial and force a 2^127 special case into every magnitude check.
-// Reserving it costs one value in 2^128 and buys a symmetric range.
+// i128::MIN has no positive counterpart, so admitting it as a finite value
+// would make negation and abs partial. Held out of the finite range it becomes
+// the one spare bit pattern, and costs one value in 2^128 to reserve.
 pub(crate) const MIN_RAW: i128 = -i128::MAX;
 
-// i128::MIN is the only raw outside the range, so one compare settles it
+// The not-a-number state: overflow, and any operation touching one. It is the
+// only raw below MIN_RAW, so a single compare recognises it, and because the
+// finite range is symmetric it is also the only raw that wrapping negation and
+// wrapping abs map to themselves - propagation through `-` and `abs` is free.
+pub(crate) const NAN_RAW: i128 = i128::MIN;
+
+// the finite range is symmetric, so NAN_RAW is the only raw outside it
 #[inline(always)]
 pub(crate) const fn clamp_raw(raw: i128) -> i128 {
     match raw < MIN_RAW {
         true => MIN_RAW,
         false => raw,
+    }
+}
+
+// the result of a multiply that may overflow, or may land on the one raw the
+// finite range excludes; either way it is not a number
+#[inline(always)]
+pub(crate) const fn dec_or_nan(raw: Option<i128>) -> Dec {
+    match raw {
+        Some(raw) if raw != NAN_RAW => Dec(raw),
+        _ => Dec::NAN,
     }
 }
 
@@ -41,6 +57,25 @@ pub(crate) const POW10: [i128; 39] = {
     table
 };
 
+/// A decimal carrying a fixed [`Dec::SCALE`] decimal places, backed by an
+/// `i128` holding the value scaled by `10^SCALE`.
+///
+/// Arithmetic is exact between [`Dec::MIN`] and [`Dec::MAX`]. Anything that
+/// leaves that range becomes [`Dec::NAN`] and stays NaN through every later
+/// operation, so the fault reaches the boundary where [`Dec::is_finite`] is
+/// checked rather than being clamped to a plausible number or raised as a
+/// panic on a hot path.
+///
+/// The ordering is total: NaN equals itself and sorts below [`Dec::MIN`],
+/// which keeps `Eq`, `Ord` and `Hash` derivable and so keeps `Dec` usable as a
+/// `BTreeMap` or `HashMap` key. See the [design](crate::design) notes for why.
+///
+/// ```
+/// use troy::{Dec, dec};
+///
+/// assert_eq!(dec!(2.5) + dec!(0.25), dec!(2.75));
+/// assert!((Dec::MAX + Dec::ONE).is_nan());
+/// ```
 #[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Dec(pub(crate) i128);
 
@@ -51,24 +86,62 @@ impl Dec {
     pub const ZERO: Self = Self(0);
     pub const ONE: Self = Self(ONE_RAW);
     pub const NEG_ONE: Self = Self(-ONE_RAW);
+
+    /// The smallest finite value, `-Dec::MAX`. The finite range is symmetric,
+    /// so negation and [`Dec::abs`] are total and exact on it.
     pub const MIN: Self = Self(MIN_RAW);
+
+    /// The largest finite value, roughly `1.7e20`.
     pub const MAX: Self = Self(MAX_RAW);
+
+    /// The smallest positive value, one unit in the last place.
     pub const EPSILON: Self = Self(1);
 
-    /// Wrap a raw scaled integer, or `None` for `i128::MIN`, the one value
-    /// outside the range. Every raw that [`Dec::into_raw`] returns round trips.
+    /// The not-a-number state. Every operation that leaves the finite range
+    /// returns it, and every operation given it returns it, so an invalid
+    /// result carries its own invalidity to wherever it is finally checked
+    /// with [`Dec::is_finite`].
+    ///
+    /// Unlike an IEEE NaN this one is ordered and reflexive: it equals itself
+    /// and sorts below [`Dec::MIN`], which is what keeps `Eq` and `Ord`
+    /// available. It therefore wins any `min` reduction and sorts to the front
+    /// of a collection.
+    ///
+    /// ```
+    /// use troy::Dec;
+    ///
+    /// assert_eq!(Dec::NAN, Dec::NAN);
+    /// assert!(Dec::NAN < Dec::MIN);
+    /// assert!(!Dec::NAN.is_finite());
+    /// ```
+    pub const NAN: Self = Self(NAN_RAW);
+
+    /// Wrap a raw scaled integer. Total: `i128::MIN` is [`Dec::NAN`], so every
+    /// raw round trips through [`Dec::into_raw`].
     #[inline(always)]
-    pub const fn from_raw(raw: i128) -> Option<Self> {
-        match check_raw(raw) {
-            Some(raw) => Some(Self(raw)),
-            None => None,
-        }
+    pub const fn from_raw(raw: i128) -> Self {
+        Self(raw)
     }
 
-    /// Wrap a raw scaled integer, clamping `i128::MIN` to [`Dec::MIN`].
+    /// Whether this is [`Dec::NAN`], the state every overflow collapses to.
     #[inline(always)]
-    pub const fn from_raw_saturating(raw: i128) -> Self {
-        Self(clamp_raw(raw))
+    pub const fn is_nan(self) -> bool {
+        self.0 == NAN_RAW
+    }
+
+    /// Whether this is an ordinary number, the check to make where a value
+    /// leaves the system.
+    ///
+    /// ```
+    /// use troy::{Dec, dec};
+    ///
+    /// assert!(dec!(1.5).is_finite());
+    /// assert!(Dec::MAX.is_finite());
+    /// assert!(!(Dec::MAX * Dec::MAX).is_finite());
+    /// ```
+    #[inline(always)]
+    pub const fn is_finite(self) -> bool {
+        self.0 != NAN_RAW
     }
 
     #[inline(always)]
@@ -94,31 +167,46 @@ impl Dec {
         }
     }
 
+    /// Whether this is exactly zero. [`Dec::NAN`] is not.
     #[inline(always)]
     pub const fn is_zero(self) -> bool {
         self.0 == 0
     }
 
+    /// Whether this is a finite value below zero. [`Dec::NAN`] is neither
+    /// negative nor positive, so this is not a finiteness test.
     #[inline(always)]
     pub const fn is_sign_negative(self) -> bool {
-        self.0 < 0
+        self.0 < 0 && self.is_finite()
     }
 
+    /// Whether this is a value above zero. [`Dec::NAN`] is not.
     #[inline(always)]
     pub const fn is_sign_positive(self) -> bool {
         self.0 > 0
     }
 
+    /// The magnitude, exact for every finite value because the range is
+    /// symmetric. [`Dec::NAN`] stays NaN.
     #[inline(always)]
     pub const fn abs(self) -> Self {
-        Self(self.0.saturating_abs())
+        // wrapping_abs maps NAN_RAW to itself; every finite raw has an exact
+        // magnitude, so this is exact and propagates without a branch
+        Self(self.0.wrapping_abs())
     }
 
+    /// [`Dec::ONE`], [`Dec::NEG_ONE`] or [`Dec::ZERO`] by sign. [`Dec::NAN`]
+    /// stays NaN.
     #[inline(always)]
     pub const fn signum(self) -> Self {
-        Self(self.0.signum() * ONE_RAW)
+        match self.is_nan() {
+            true => Self::NAN,
+            false => Self(self.0.signum() * ONE_RAW),
+        }
     }
 
+    /// Convert to `f64`, rounding to the nearest representable double.
+    /// [`Dec::NAN`] becomes `f64::NAN`.
     #[inline(always)]
     pub fn to_f64(self) -> f64 {
         // i128 -> f64 is a __floattidf libcall, i64 -> f64 is one instruction.
@@ -134,9 +222,18 @@ impl Dec {
             };
             return signed as f64 / CHUNK_F64;
         }
+        // 10^9 does not divide 2^127, so NaN never takes the path above and
+        // the test costs nothing on it
+        if self.is_nan() {
+            return f64::NAN;
+        }
         self.0 as f64 / ONE_RAW as f64
     }
 
+    /// Convert from `f64`, or `None` when the value is not finite or does not
+    /// fit the finite range. This never yields [`Dec::NAN`]: a conversion
+    /// reports failure directly, since there is no earlier computation for a
+    /// NaN to have propagated from.
     #[inline(always)]
     pub fn from_f64(value: f64) -> Option<Self> {
         // NaN would otherwise cast to zero; every other out-of-range value,
@@ -154,53 +251,85 @@ impl Dec {
             .map(Self)
     }
 
+    /// The largest whole number at or below this value, or [`Dec::NAN`] when
+    /// that leaves the finite range, as it does for [`Dec::MIN`].
     #[inline(always)]
     pub const fn floor(self) -> Self {
-        Self(clamp_raw(
-            self.0.div_euclid(ONE_RAW).saturating_mul(ONE_RAW),
-        ))
+        // NaN needs no test of its own: flooring 2^127 rounds away from zero,
+        // and the product then overflows, which is already the NaN answer
+        dec_or_nan(self.0.div_euclid(ONE_RAW).checked_mul(ONE_RAW))
     }
 
+    /// The smallest whole number at or above this value, or [`Dec::NAN`] when
+    /// that leaves the finite range, as it does for [`Dec::MAX`].
     #[inline(always)]
     pub const fn ceil(self) -> Self {
-        // the leading negation is exact: the range is symmetric
-        Self(clamp_raw(
-            self.0
-                .saturating_neg()
-                .div_euclid(ONE_RAW)
-                .saturating_mul(ONE_RAW)
-                .saturating_neg(),
-        ))
+        // ceil(x) = -floor(-x). Wrapping negation maps NaN to itself and every
+        // finite raw to its exact opposite, so this inherits floor's handling
+        let floor = Self(self.0.wrapping_neg()).floor();
+        Self(floor.0.wrapping_neg())
     }
 
+    /// The whole part, rounding towards zero. Always finite for a finite
+    /// input; [`Dec::NAN`] stays NaN.
     #[inline(always)]
     pub const fn trunc(self) -> Self {
-        Self(clamp_raw((self.0 / ONE_RAW).saturating_mul(ONE_RAW)))
+        match self.is_nan() {
+            true => Self::NAN,
+            // the magnitude only shrinks, so the product cannot overflow
+            false => Self((self.0 / ONE_RAW) * ONE_RAW),
+        }
     }
 
+    /// The sum, or `None` if it leaves the finite range or either side is
+    /// [`Dec::NAN`]. Use this where an overflow should be handled on the spot
+    /// rather than propagated.
     #[inline(always)]
     pub const fn checked_add(self, rhs: Self) -> Option<Self> {
+        if self.is_nan() || rhs.is_nan() {
+            return None;
+        }
         match self.0.checked_add(rhs.0) {
-            Some(raw) => Self::from_raw(raw),
+            Some(raw) => match check_raw(raw) {
+                Some(raw) => Some(Self(raw)),
+                None => None,
+            },
             None => None,
         }
     }
 
+    /// The difference, or `None` if it leaves the finite range or either side
+    /// is [`Dec::NAN`].
     #[inline(always)]
     pub const fn checked_sub(self, rhs: Self) -> Option<Self> {
+        if self.is_nan() || rhs.is_nan() {
+            return None;
+        }
         match self.0.checked_sub(rhs.0) {
-            Some(raw) => Self::from_raw(raw),
+            Some(raw) => match check_raw(raw) {
+                Some(raw) => Some(Self(raw)),
+                None => None,
+            },
             None => None,
         }
     }
 
+    /// The product, or `None` if it leaves the finite range or either side is
+    /// [`Dec::NAN`]. Exact, with the excess below [`Dec::SCALE`] rounded half
+    /// away from zero.
     #[inline(always)]
     pub fn checked_mul(self, rhs: Self) -> Option<Self> {
         mul_raw(self.0, rhs.0).map(Self)
     }
 
+    /// The product, clamped to [`Dec::MIN`] or [`Dec::MAX`] on overflow.
+    /// A [`Dec::NAN`] operand still gives NaN: there is no sign to clamp
+    /// towards, and clamping an unknown would invent one.
     #[inline(always)]
     pub fn saturating_mul(self, rhs: Self) -> Self {
+        if self.is_nan() || rhs.is_nan() {
+            return Self::NAN;
+        }
         match self.checked_mul(rhs) {
             Some(value) => value,
             None => match (self.0 < 0) != (rhs.0 < 0) {
@@ -210,22 +339,37 @@ impl Dec {
         }
     }
 
+    /// The sum, clamped to [`Dec::MIN`] or [`Dec::MAX`] on overflow. A
+    /// [`Dec::NAN`] operand still gives NaN.
     #[inline(always)]
     pub const fn saturating_add(self, rhs: Self) -> Self {
-        Self(clamp_raw(self.0.saturating_add(rhs.0)))
+        match self.is_nan() || rhs.is_nan() {
+            true => Self::NAN,
+            false => Self(clamp_raw(self.0.saturating_add(rhs.0))),
+        }
     }
 
+    /// The difference, clamped to [`Dec::MIN`] or [`Dec::MAX`] on overflow. A
+    /// [`Dec::NAN`] operand still gives NaN.
     #[inline(always)]
     pub const fn saturating_sub(self, rhs: Self) -> Self {
-        Self(clamp_raw(self.0.saturating_sub(rhs.0)))
+        match self.is_nan() || rhs.is_nan() {
+            true => Self::NAN,
+            false => Self(clamp_raw(self.0.saturating_sub(rhs.0))),
+        }
     }
 
     // cannot overflow: the sum is formed in a wider space than either operand.
     // A half unit in the last place rounds towards zero rather than away from
     // it, the one place this type does not round halves away from zero.
+    /// The value halfway between the two, which cannot overflow because the
+    /// sum is formed in a wider space. [`Dec::NAN`] on either side gives NaN.
     #[inline(always)]
     pub const fn midpoint(self, rhs: Self) -> Self {
-        Self(self.0.midpoint(rhs.0))
+        match self.is_nan() || rhs.is_nan() {
+            true => Self::NAN,
+            false => Self(self.0.midpoint(rhs.0)),
+        }
     }
 }
 
@@ -319,7 +463,7 @@ mod tests {
         );
         assert_eq!(
             Dec::from_str("0.0000000000000000015").unwrap(),
-            Dec::from_raw(2).unwrap()
+            Dec::from_raw(2)
         );
     }
 
@@ -327,7 +471,7 @@ mod tests {
     fn test_parse_exponent_form() {
         assert_eq!(
             Dec::from_str("1e-8").unwrap(),
-            Dec::from_raw(10_000_000_000).unwrap()
+            Dec::from_raw(10_000_000_000)
         );
         assert_eq!(
             Dec::from_str("1.5E3").unwrap(),
@@ -350,7 +494,7 @@ mod tests {
     fn test_macro_is_const() {
         const HALF: Dec = dec!(0.5);
         const NEGATIVE: Dec = dec!(-1.25);
-        assert_eq!(HALF, Dec::from_raw(500_000_000_000_000_000).unwrap());
+        assert_eq!(HALF, Dec::from_raw(500_000_000_000_000_000));
         assert_eq!(NEGATIVE.to_string(), "-1.25");
     }
 
@@ -421,12 +565,22 @@ mod tests {
     }
 
     #[test]
-    fn test_extremes_do_not_overflow() {
+    fn test_extremes_that_stay_in_range_are_exact() {
         assert_eq!(Dec::MIN.abs(), Dec::MAX);
         assert_eq!(-Dec::MIN, Dec::MAX);
-        assert_eq!(Dec::MIN.floor(), Dec::MIN);
-        assert_eq!(Dec::MAX.ceil(), Dec::MAX);
-        assert_eq!(Dec::MIN.round_dp(0), Dec::MIN);
+        // rounding towards zero cannot leave the range
+        assert_eq!(Dec::MIN.ceil(), Dec::MIN.trunc());
+        assert_eq!(Dec::MAX.floor(), Dec::MAX.trunc());
+    }
+
+    // the whole unit past either extreme is outside the finite range, and
+    // saturating back onto it would report a value a full unit from the truth
+    #[test]
+    fn test_extremes_that_leave_the_range_become_nan() {
+        assert!(Dec::MIN.floor().is_nan());
+        assert!(Dec::MAX.ceil().is_nan());
+        assert!(Dec::MIN.round_dp(0).is_nan());
+        assert!(Dec::MAX.round_dp(0).is_nan());
     }
 }
 
@@ -495,16 +649,12 @@ mod midpoint {
     #[test]
     fn test_midpoint_of_an_odd_last_place_rounds_towards_zero() {
         assert_eq!(
+            Dec::from_raw(1).midpoint(Dec::from_raw(2)),
             Dec::from_raw(1)
-                .unwrap()
-                .midpoint(Dec::from_raw(2).unwrap()),
-            Dec::from_raw(1).unwrap()
         );
         assert_eq!(
+            Dec::from_raw(-1).midpoint(Dec::from_raw(-2)),
             Dec::from_raw(-1)
-                .unwrap()
-                .midpoint(Dec::from_raw(-2).unwrap()),
-            Dec::from_raw(-1).unwrap()
         );
     }
 }
@@ -684,7 +834,7 @@ mod to_f64_accuracy {
             let scale = POW10[(state % 10) as usize];
             let sign = if state & 1 == 0 { 1 } else { -1 };
             let raw = ((state as i128) * scale).saturating_mul(sign);
-            worst = worst.max(ulps_from_truth(Dec::from_raw(raw).unwrap()));
+            worst = worst.max(ulps_from_truth(Dec::from_raw(raw)));
         }
         assert!(worst <= 1, "drifted {worst} ulp from the nearest f64");
     }

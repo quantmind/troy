@@ -213,11 +213,11 @@ mod errors {
     fn test_const_parsing_reports_failure_without_panicking() {
         assert_eq!(
             Dec::parse_const("1.5"),
-            Dec::from_raw(1_500_000_000_000_000_000)
+            Some(Dec::from_raw(1_500_000_000_000_000_000))
         );
         assert_eq!(
             Dec::parse_const("-0.25"),
-            Dec::from_raw(-250_000_000_000_000_000)
+            Some(Dec::from_raw(-250_000_000_000_000_000))
         );
         assert_eq!(Dec::parse_const(""), None);
         assert_eq!(Dec::parse_const("1.2.3"), None);

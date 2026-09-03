@@ -43,6 +43,12 @@ pub(crate) fn mul_raw(a: i128, b: i128) -> Option<i128> {
 // finer than 9 decimals: split both at the decimal point, which leaves two
 // fractions below 10^18 that finish in 64-bit lanes
 fn mul_wide(a: u128, b: u128, negative: bool) -> Option<i128> {
+    // a NaN operand has magnitude 2^127, which 10^9 does not divide, so it
+    // always arrives here rather than on the fast path above. Nothing finite
+    // reaches this magnitude, so one bound recognises it for both operands.
+    if (a | b) > MAX_RAW as u128 {
+        return None;
+    }
     let (a_int, a_frac) = (a / ONE_U, (a % ONE_U) as u64);
     let (b_int, b_frac) = (b / ONE_U, (b % ONE_U) as u64);
     let (tail, remainder) = mul_frac(a_frac, b_frac);
@@ -127,7 +133,7 @@ mod multiply {
         let fine = Dec::from_str("0.0000000001").unwrap();
         assert!(div_exact_1e9(fine.into_raw().unsigned_abs()).is_none());
         assert_eq!(fine * dec!(3), Dec::from_str("0.0000000003").unwrap());
-        assert_eq!(Dec::EPSILON * dec!(1000), Dec::from_raw(1_000).unwrap());
+        assert_eq!(Dec::EPSILON * dec!(1000), Dec::from_raw(1_000));
     }
 
     #[test]

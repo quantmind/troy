@@ -1,4 +1,4 @@
-use super::core::{POW10, div_round};
+use super::core::{POW10, check_raw, div_round};
 use super::{Dec, ParseDecError};
 use rust_decimal::Decimal;
 
@@ -11,13 +11,14 @@ impl Dec {
         if scale <= Dec::SCALE {
             return mantissa
                 .checked_mul(POW10[(Dec::SCALE - scale) as usize])
-                .and_then(Self::from_raw);
+                .and_then(check_raw)
+                .map(Self::from_raw);
         }
         let factor = match POW10.get((scale - Dec::SCALE) as usize) {
             Some(factor) => *factor,
             None => return Some(Self::ZERO),
         };
-        Self::from_raw(div_round(mantissa, factor))
+        check_raw(div_round(mantissa, factor)).map(Self::from_raw)
     }
 
     /// Widen to a [`Decimal`] at [`Dec::SCALE`] decimal places, or `None` when the
