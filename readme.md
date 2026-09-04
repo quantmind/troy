@@ -1,9 +1,11 @@
 # Troy
 
 [![build](https://github.com/quantmind/troy/actions/workflows/build.yml/badge.svg)](https://github.com/quantmind/troy/actions/workflows/build.yml)
+[![crates.io](https://img.shields.io/crates/v/troy.svg)](https://crates.io/crates/troy)
+[![docs.rs](https://img.shields.io/docsrs/troy)](https://docs.rs/troy)
 
 Superfast primitives and data structures for high frequency trading, in safe
-Rust — `unsafe` is forbidden crate-wide.
+Rust, `unsafe` is forbidden crate-wide.
 
 Two things live here: **`Dec`**, a fixed-scale decimal for exact arithmetic,
 and **`OrderBook`**, a level 2 book built on it.
@@ -58,9 +60,13 @@ that removes the level cannot take a NaN back out again.
 
 ## Benchmarks
 
-Nanoseconds per operation against `rust_decimal`, `fastnum` and native `f64`,
-measured on an Intel Core Ultra 9 285H. `f64` is the inexact reference, not a
-competitor; **bold** marks the fastest decimal.
+**[troy.quantmind.com](https://troy.quantmind.com)** carries the full results:
+every operation charted, the parse and format cost by digit width, and the
+machine the numbers came from.
+
+The summary — nanoseconds per operation against `rust_decimal`, `fastnum` and
+native `f64`, measured on an Intel Core Ultra 9 285H. `f64` is the inexact
+reference, not a competitor; **bold** marks the fastest decimal.
 
 | operation | f64 | `Dec` | `rust_decimal` | `fastnum` |
 |---|---|---|---|---|
@@ -75,9 +81,9 @@ competitor; **bold** marks the fastest decimal.
 | from f64 | — | **8.89** | 81.51 | 75.94 |
 
 Run them yourself with `make bench`, or `make bench-save` to record a snapshot
-and `make bench-page` to render it. Numbers published from this repo come from
-a committed snapshot rather than a CI run, because a shared runner varies by
-more than the differences being measured.
+and `make bench-page` to render the page locally. Published numbers come from a
+committed snapshot rather than a CI run, because a shared runner varies by more
+than the differences being measured.
 
 ## Features
 
@@ -90,6 +96,9 @@ more than the differences being measured.
 All are off by default.
 
 ## Documentation
+
+API documentation lives on **[docs.rs/troy](https://docs.rs/troy)**, built with
+every feature enabled.
 
 The `design` module covers the reasoning behind the representation, the NaN
 state, the ordering, and how multiplication and division reach 187 bits in
