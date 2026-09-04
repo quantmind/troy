@@ -15,6 +15,11 @@ publish = true
 name = "troy"
 path = "src/mod.rs"
 
+# docs.rs builds one page per published version; build it with serde and
+# rust_decimal on so the optional conversions are documented
+[package.metadata.docs.rs]
+all-features = true
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_debug_implementations = "warn"

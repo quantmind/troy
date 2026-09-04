@@ -164,6 +164,64 @@ impl FromStr for Dec {
 }
 
 #[cfg(test)]
+mod parsing {
+    #![allow(clippy::unwrap_used)]
+
+    use crate::Dec;
+    use crate::ParseDecError;
+    use crate::dec;
+    use std::str::FromStr;
+
+    #[test]
+    fn test_parse_trims_and_rounds_excess_precision() {
+        assert_eq!(
+            Dec::from_str("1.50").unwrap(),
+            Dec::from_str("1.5").unwrap()
+        );
+        assert_eq!(
+            Dec::from_str("0.0000000000000000005").unwrap(),
+            Dec::EPSILON,
+            "half rounds away from zero at the scale boundary"
+        );
+        assert_eq!(
+            Dec::from_str("0.0000000000000000015").unwrap(),
+            Dec::from_raw(2)
+        );
+    }
+
+    #[test]
+    fn test_parse_exponent_form() {
+        assert_eq!(
+            Dec::from_str("1e-8").unwrap(),
+            Dec::from_raw(10_000_000_000)
+        );
+        assert_eq!(
+            Dec::from_str("1.5E3").unwrap(),
+            Dec::from_str("1500").unwrap()
+        );
+        assert_eq!(
+            Dec::from_str("-2.5e-1").unwrap(),
+            Dec::from_str("-0.25").unwrap()
+        );
+    }
+
+    #[test]
+    fn test_parse_rejects_malformed_input() {
+        assert_eq!(Dec::from_str(""), Err(ParseDecError::Empty));
+        assert_eq!(Dec::from_str("1.2.3"), Err(ParseDecError::InvalidDigit));
+        assert_eq!(Dec::from_str("abc"), Err(ParseDecError::InvalidDigit));
+    }
+
+    #[test]
+    fn test_macro_is_const() {
+        const HALF: Dec = dec!(0.5);
+        const NEGATIVE: Dec = dec!(-1.25);
+        assert_eq!(HALF, Dec::from_raw(500_000_000_000_000_000));
+        assert_eq!(NEGATIVE.to_string(), "-1.25");
+    }
+}
+
+#[cfg(test)]
 mod wide_values {
     #![allow(clippy::unwrap_used)]
 
