@@ -46,6 +46,14 @@ pub(crate) const fn parse_bytes(bytes: &[u8]) -> Result<i128, ParseDecError> {
     let mut mantissa: u64 = 0;
     let mut wide: u128 = 0;
     let mut promoted = false;
+    // set once the mantissa can take no more digits. Text can carry more
+    // significant digits than a u128 holds while naming a value well inside the
+    // range - one written with forty decimal places, or the exact expansion of
+    // a double - so a full mantissa stops the accumulation rather than failing
+    // the parse. Every digit after it is below the last one kept, so it can only
+    // round that one and then move the exponent.
+    let mut saturated = false;
+    let mut first_dropped: u8 = 0;
     let mut exponent: i32 = 0;
     let mut digits = 0;
     let mut seen_point = false;
@@ -58,9 +66,17 @@ pub(crate) const fn parse_bytes(bytes: &[u8]) -> Result<i128, ParseDecError> {
                 wide = match wide.checked_mul(10) {
                     Some(value) => match value.checked_add(digit as u128) {
                         Some(value) => value,
-                        None => return Err(ParseDecError::Overflow),
+                        None => {
+                            saturated = true;
+                            first_dropped = digit;
+                            break;
+                        }
                     },
-                    None => return Err(ParseDecError::Overflow),
+                    None => {
+                        saturated = true;
+                        first_dropped = digit;
+                        break;
+                    }
                 };
             } else if mantissa > (u64::MAX - 9) / 10 {
                 wide = mantissa as u128 * 10 + digit as u128;
@@ -89,6 +105,42 @@ pub(crate) const fn parse_bytes(bytes: &[u8]) -> Result<i128, ParseDecError> {
         seen_point = true;
         index += 1;
     }
+
+    // The mantissa filled, which takes 39 significant digits and so never
+    // happens to ordinary text. The remainder is read by a second loop rather
+    // than by a test inside the first: the digits above are the hot path, and a
+    // branch per digit to ask a question answered the same way every time costs
+    // more than repeating the punctuation handling here does. Nothing from here
+    // reaches the mantissa. A digit before the point multiplies the value by
+    // ten, which the exponent carries; one after it is below the last digit
+    // kept and only `first_dropped` remembers it, for the rounding below.
+    if saturated {
+        while index < len {
+            let digit = bytes[index].wrapping_sub(b'0');
+            if digit < 10 {
+                digits += 1;
+                if !seen_point {
+                    exponent += 1;
+                }
+                index += 1;
+                continue;
+            }
+            let byte = bytes[index];
+            if byte == b'e' || byte == b'E' {
+                break;
+            }
+            if byte == b'_' {
+                index += 1;
+                continue;
+            }
+            if byte != b'.' || seen_point {
+                return Err(ParseDecError::InvalidDigit);
+            }
+            seen_point = true;
+            index += 1;
+        }
+    }
+
     if digits == 0 {
         return Err(ParseDecError::Empty);
     }
@@ -129,6 +181,21 @@ pub(crate) const fn parse_bytes(bytes: &[u8]) -> Result<i128, ParseDecError> {
         if shift > 38 {
             return Err(ParseDecError::Overflow);
         }
+        // a dropped digit sits immediately below the last one the mantissa
+        // kept, so here, where nothing else rounds, it rounds that one, half
+        // away from zero as everywhere else. Below it needs no handling: the
+        // scale division rounds a tie away from zero already, and a dropped
+        // tail is worth less than one unit of the mantissa, so it can push a
+        // remainder no further than from a tie to just past one.
+        let magnitude = match first_dropped >= 5 {
+            true => match magnitude.checked_add(1) {
+                Some(value) => value,
+                // the mantissa was already the widest a u128 holds, so this is
+                // past the range whichever way the last digit went
+                None => return Err(ParseDecError::Overflow),
+            },
+            false => magnitude,
+        };
         match magnitude.checked_mul(POW10[shift as usize] as u128) {
             Some(value) => value,
             None => return Err(ParseDecError::Overflow),
@@ -259,6 +326,56 @@ mod wide_values {
         assert_eq!(
             Dec::from_str("1701411834604692317316873037158841057270"),
             Err(ParseDecError::Overflow)
+        );
+    }
+
+    #[test]
+    fn test_precision_past_the_mantissa_rounds_rather_than_failing() {
+        // one, spelled with 43 significant digits. The mantissa fills long
+        // before the last of them, and every digit it cannot take is below the
+        // scale, so the value is one however many ways it is written
+        let one = format!("1.{}1", "0".repeat(41));
+        assert_eq!(Dec::from_str(&one).unwrap(), Dec::ONE);
+
+        // the widest value the type holds, with one digit of excess either side
+        // of the half that decides which way it rounds
+        assert_eq!(
+            Dec::from_str(&format!("{}1", Dec::MAX)).unwrap(),
+            Dec::MAX,
+            "a trailing 1 rounds down and leaves MAX where it was"
+        );
+        assert_eq!(
+            Dec::from_str(&format!("{}1", Dec::MIN)).unwrap(),
+            Dec::MIN,
+            "and the same at the other end of a symmetric range"
+        );
+        assert_eq!(
+            Dec::from_str(&format!("{}5", Dec::MAX)),
+            Err(ParseDecError::Overflow),
+            "a trailing 5 rounds up, which really is past the range"
+        );
+    }
+
+    #[test]
+    fn test_the_exact_expansion_of_a_double_parses() {
+        // what Python's `Decimal(0.1)` prints: the exact binary value of the
+        // double nearest 0.1, 55 significant digits naming something that sits
+        // comfortably inside the range. A producer that serialises floats this
+        // way is the likeliest source of a mantissa wider than a u128.
+        assert_eq!(
+            Dec::from_str("0.1000000000000000055511151231257827021181583404541015625").unwrap(),
+            Dec::from_str("0.100000000000000006").unwrap()
+        );
+    }
+
+    #[test]
+    fn test_a_mantissa_at_the_u128_limit_still_rounds_correctly() {
+        // the mantissa here is exactly u128::MAX, so the digit that follows
+        // cannot round it in place without overflowing; the scale division
+        // carries the decision instead, which is why the two are separated
+        assert_eq!(
+            Dec::from_str("34028236692093846346.33746074317682114559").unwrap(),
+            Dec::from_str("34028236692093846346.337460743176821146").unwrap()
         );
     }
 }

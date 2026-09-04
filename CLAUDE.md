@@ -11,6 +11,19 @@ cargo build            # build the library
 cargo test --all-features  # run tests with all features enabled
 ```
 
+Three layers of tests, all run by `cargo test --all-features`:
+
+- unit tests beside the code they cover, in `src/`
+- `tests/oracle.rs`, checking multiplication and division against an exact
+  256-bit reference that shares no code with them
+- `tests/fuzz.rs`, proptest properties over the parser, the renderer, rounding,
+  the `f64` conversions and the operator contracts
+
+`make rs-oracle` and `make rs-fuzz` re-run the last two in release over a far
+wider sweep than a debug build affords; CI runs both on every PR. A failing
+property records its case in `tests/fuzz.proptest-regressions`, which is
+committed so the case is replayed from then on.
+
 ## Lint & Format
 
 ```bash
@@ -25,6 +38,36 @@ Or use the Make targets:
 make rs-lint           # fmt + clippy (auto-fixes formatting)
 make rs-test           # test with all features
 ```
+
+## Releasing
+
+Tagging is the whole release: `.github/workflows/release.yml` fires on a `v*`
+tag, checks the tag against `Cargo.toml`, lints, tests, builds the docs, pulls
+the matching section out of `docs/release-notes.md`, publishes to crates.io and
+opens the GitHub Release with those notes as the body. Everything that can fail
+runs before the publish, which cannot be taken back for a version.
+
+So a release is four steps, in this order:
+
+1. Bump `version` in `Cargo.toml`.
+2. Add a `## v<version>` section to `docs/release-notes.md`. The tag must match
+   the version and the section must exist and be non-empty, or the workflow
+   fails — after tagging, before publishing.
+3. Commit and push to `main`, and let `build.yml` pass. It runs the full oracle
+   sweep and the property sweep in release, which the release workflow does not.
+4. `make release` — tags `v<version>` from `Cargo.toml` and pushes the tag.
+
+### Release notes
+
+`docs/release-notes.md` is the source of truth, one `## v<version>` section per
+tagged release, newest first. Keep them compact: grouped bullets under `Fixed`,
+`Added`, `Changed` and `Removed`, one bullet per change, one or two lines each.
+Say what changed and what a caller does about it. Reasoning belongs in the code,
+beside the thing it explains.
+
+Before tagging, `make bench-save` on the reference machine if the numbers moved:
+`docs/bench-data.json` carries the commit it was measured at, and the published
+page is rendered from it, not from CI.
 
 ## Benchmarks
 

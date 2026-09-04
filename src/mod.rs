@@ -25,7 +25,7 @@
 //! the best price, the n-th level and the depth cut are index arithmetic
 //! rather than searches, and a level enters only if [`PriceAmount::is_valid`]
 //! accepts it — a non-finite price would sort against every other level, and a
-//! non-finite amount would poison the side's running total for good.
+//! non-finite amount would carry into every statistic taken over the side.
 //!
 //! ```
 //! use troy::{OrderBook, dec};

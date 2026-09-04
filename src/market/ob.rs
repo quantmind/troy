@@ -9,10 +9,17 @@ const DEFAULT_CAPACITY: usize = 64;
 /// the best level, the n-th level and the depth cut are all index arithmetic.
 #[derive(Clone, Debug)]
 pub struct OrderBookSide {
+    // A vector rather than a deque, measured rather than assumed. A deque
+    // inserts near the front without shifting, which is where a busy venue
+    // adds, and `book_insert` in the benchmarks is 34% faster on one at 512
+    // levels. It buys nothing at the depths a book is actually capped to - one
+    // nanosecond at 32, less than nothing at 8 - and it charges for the ring
+    // arithmetic on every read: 5% on `best_price`, which is the hottest and
+    // cheapest call here, and 4% on an update. A compact book does far more of
+    // those than it does inserts.
     levels: Vec<PriceAmount>,
     desc: bool,
     max_depth: Option<usize>,
-    total_amount: Dec,
 }
 
 /// A level 2 order book.
@@ -64,7 +71,6 @@ impl OrderBookSide {
             levels: Vec::with_capacity(capacity),
             desc,
             max_depth,
-            total_amount: Dec::ZERO,
         }
     }
 
@@ -138,12 +144,10 @@ impl OrderBookSide {
         match self.search(entry.price) {
             Ok(index) => {
                 let previous = self.levels[index].amount;
-                self.discount(previous);
                 if entry.amount.is_zero() {
                     self.levels.remove(index);
                 } else {
                     self.levels[index].amount = entry.amount;
-                    self.accrue(entry.amount);
                 }
                 Some(previous)
             }
@@ -152,7 +156,6 @@ impl OrderBookSide {
                     return None;
                 }
                 self.levels.insert(index, entry);
-                self.accrue(entry.amount);
                 if let Some(depth) = self.max_depth {
                     self.trim(depth);
                 }
@@ -168,14 +171,7 @@ impl OrderBookSide {
 
     /// Retain at most `depth` levels, dropping the worst ones beyond that.
     pub fn trim(&mut self, depth: usize) {
-        if self.levels.len() <= depth {
-            return;
-        }
-        let mut amount = Dec::ZERO;
-        for level in self.levels.drain(depth..) {
-            amount += level.amount;
-        }
-        self.total_amount -= amount;
+        self.levels.truncate(depth);
     }
 
     /// Iterate levels within `[low, high]` in best-first order.
@@ -207,6 +203,22 @@ impl OrderBookSide {
             .reduce(|acc, x| acc + x)
     }
 
+    /// Total amount over the levels in `from..to`, best first, or `None` when
+    /// the range holds none.
+    ///
+    /// `to` past the end takes what is there. A `to` at or below `from` is an
+    /// empty range and answers `None`: the take yields fewer levels than the
+    /// skip discards, so nothing is summed, which is the same answer an empty
+    /// side gives and the right one for a band with no levels in it.
+    fn volume_in(&self, from: usize, to: usize) -> Option<Dec> {
+        self.levels
+            .iter()
+            .take(to)
+            .skip(from)
+            .map(|entry| entry.amount)
+            .reduce(|total, amount| total + amount)
+    }
+
     /// Volume weighted price paid to fill `quantity`, or `None` if the side is
     /// too thin.
     pub fn price_for_quantity(&self, quantity: f64) -> Option<f64> {
@@ -227,11 +239,22 @@ impl OrderBookSide {
     }
 
     /// Mean level amount, or `None` when the side is empty.
+    ///
+    /// Summed on demand rather than kept as a running total. A running one
+    /// would have to be corrected on every `set`, which is the hot path, to
+    /// save an addition per level here, which is not; and one non-finite amount
+    /// would poison it for good, since the subtraction that removes the level
+    /// cannot take a NaN back out again.
     pub fn amount_mean(&self) -> Option<f64> {
         match self.levels.len() {
             0 => None,
-            count => Some(self.total_amount.to_f64() / count as f64),
+            count => Some(self.total_amount().to_f64() / count as f64),
         }
+    }
+
+    /// The sum of every level amount, exactly. [`Dec::ZERO`] for an empty side.
+    fn total_amount(&self) -> Dec {
+        self.levels.iter().map(|level| level.amount).sum()
     }
 
     /// Population standard deviation of the level amounts, or `None` when the
@@ -243,13 +266,17 @@ impl OrderBookSide {
     /// has some, and the clamp that hid it turned corruption into a plausible
     /// number. The mean comes from the exact `Dec` total, so only the
     /// deviations are floating point, and their squares cannot go negative.
+    ///
+    /// Two passes, then: the mean has to be known before a deviation can be
+    /// measured against it, which is the same reason the one-pass form is the
+    /// one that drifts.
     pub fn amount_std_dev(&self) -> Option<f64> {
         let count = self.levels.len();
         if count == 0 {
             return None;
         }
         let n = count as f64;
-        let mean = self.total_amount.to_f64() / n;
+        let mean = self.total_amount().to_f64() / n;
         let variance = self
             .levels
             .iter()
@@ -272,16 +299,6 @@ impl OrderBookSide {
                 .levels
                 .binary_search_by(|level| level.price.cmp(&price)),
         }
-    }
-
-    #[inline]
-    fn accrue(&mut self, amount: Dec) {
-        self.total_amount += amount;
-    }
-
-    #[inline]
-    fn discount(&mut self, amount: Dec) {
-        self.total_amount -= amount;
     }
 }
 
@@ -326,6 +343,45 @@ impl OrderBook {
         }
     }
 
+    /// Order book imbalance at the top: the pressure the best bid and the best
+    /// ask exert against each other.
+    ///
+    /// `(bid - ask) / (bid + ask)` over the two best amounts, which lands in
+    /// `[-1, 1]`: `1` when only bids stand at the touch, `-1` when only asks
+    /// do, and zero when they match. Positive is buying pressure.
+    ///
+    /// `None` when either side is empty, or when both best amounts are zero and
+    /// there is no pressure to take a ratio of.
+    ///
+    /// Exact rather than floating point. The amounts are exact, the sums are
+    /// exact, and only the division rounds, at the scale everything else here
+    /// carries.
+    pub fn imbalance(&self) -> Option<Dec> {
+        imbalance_of(self.bids.best()?.amount, self.asks.best()?.amount)
+    }
+
+    /// [`OrderBook::imbalance`] over a band of the book rather than the touch.
+    ///
+    /// The range is half open, `from..to`, counted in levels from the best on
+    /// each side, so `range_imbalance(0, 5)` weighs the top five levels of one
+    /// side against the top five of the other. A `to` past the end of a side
+    /// takes what that side holds, so an unevenly deep book still answers.
+    ///
+    /// `None` when either side holds no level in the range, when the amounts on
+    /// both sides of it are zero, or when the range is empty — `to` at or below
+    /// `from`, which includes an inverted one, is a band with no levels rather
+    /// than a band read backwards.
+    ///
+    /// Reading deeper than the touch is the point: the best level alone is the
+    /// easiest part of a book to move, and an imbalance measured there is the
+    /// easiest to manufacture.
+    pub fn range_imbalance(&self, from: usize, to: usize) -> Option<Dec> {
+        imbalance_of(
+            self.bids.volume_in(from, to)?,
+            self.asks.volume_in(from, to)?,
+        )
+    }
+
     /// Apply every level in `diff`, each as [`OrderBookSide::set`] does.
     pub fn apply_diff(&mut self, diff: &OrderBookDiff) {
         for bid in diff.bids.iter().copied() {
@@ -335,6 +391,17 @@ impl OrderBook {
             self.asks.set(ask);
         }
     }
+}
+
+/// `(bid - ask) / (bid + ask)`, or `None` when that has no answer.
+///
+/// Both amounts come from levels a book accepted, so both are finite and not
+/// negative, which puts the result in `[-1, 1]` and makes a zero total the only
+/// case with nothing to divide by. The checked arithmetic covers a sum past the
+/// range as well, rather than returning a ratio built on a NaN.
+fn imbalance_of(bid: Dec, ask: Dec) -> Option<Dec> {
+    let total = bid.checked_add(ask)?;
+    bid.checked_sub(ask)?.checked_div(total)
 }
 
 impl From<OrderBookTop> for OrderBook {
@@ -546,6 +613,95 @@ mod tests {
         assert_eq!(side.price_for_quantity(2.0), Some(101.0));
         assert_eq!(side.price_for_quantity(3.0), None);
         assert_eq!(side.price_for_quantity(0.0), None);
+    }
+
+    #[test]
+    fn test_imbalance_at_the_touch() {
+        let mut book = OrderBook::new(None);
+        assert_eq!(book.imbalance(), None, "an empty book has no pressure");
+
+        book.bids.set_price_amount(dec!(100), dec!(3));
+        assert_eq!(book.imbalance(), None, "one side alone is not an imbalance");
+
+        book.asks.set_price_amount(dec!(101), dec!(1));
+        // (3 - 1) / (3 + 1)
+        assert_eq!(book.imbalance(), Some(dec!(0.5)));
+
+        // matched amounts cancel
+        book.asks.set_price_amount(dec!(101), dec!(3));
+        assert_eq!(book.imbalance(), Some(Dec::ZERO));
+
+        // the ask side heavier is negative, and symmetric with the reverse
+        book.bids.set_price_amount(dec!(100), dec!(1));
+        assert_eq!(book.imbalance(), Some(dec!(-0.5)));
+    }
+
+    #[test]
+    fn test_imbalance_reaches_its_limits_and_stops() {
+        let mut book = OrderBook::new(None);
+        // a zero amount removes rather than resting, so the extremes are
+        // reached with an amount small against the other side, not with none
+        book.bids.set_price_amount(dec!(100), dec!(1));
+        book.asks.set_price_amount(dec!(101), Dec::EPSILON);
+        let imbalance = book.imbalance().expect("both sides stand");
+        assert!(imbalance < Dec::ONE, "{imbalance} reached the limit");
+        assert!(imbalance > dec!(0.999999), "{imbalance} fell short of it");
+    }
+
+    #[test]
+    fn test_range_imbalance_weighs_a_band() {
+        let mut book = OrderBook::new(None);
+        for level in 0..4 {
+            let step = dec!(0.01) * Dec::from(level);
+            book.bids.set_price_amount(dec!(100) - step, dec!(2));
+            book.asks.set_price_amount(dec!(100.01) + step, Dec::ONE);
+        }
+        // the whole band: 8 against 4
+        assert_eq!(book.range_imbalance(0, 4), Some(dec!(0.333333333333333333)));
+        // the touch alone agrees with the dedicated call
+        assert_eq!(book.range_imbalance(0, 1), book.imbalance());
+        // a band below the touch, which is the point of taking a range
+        assert_eq!(book.range_imbalance(2, 4), Some(dec!(0.333333333333333333)));
+        // an empty range has nothing to weigh
+        assert_eq!(book.range_imbalance(2, 2), None);
+        assert_eq!(book.range_imbalance(3, 1), None);
+        // past the end takes what is there rather than failing
+        assert_eq!(book.range_imbalance(0, 99), book.range_imbalance(0, 4));
+        assert_eq!(book.range_imbalance(9, 99), None);
+    }
+
+    #[test]
+    fn test_range_imbalance_of_an_empty_or_inverted_band_is_none() {
+        let mut book = OrderBook::new(None);
+        for level in 0..4 {
+            let step = dec!(0.01) * Dec::from(level);
+            book.bids.set_price_amount(dec!(100) - step, dec!(2));
+            book.asks.set_price_amount(dec!(100.01) + step, Dec::ONE);
+        }
+        // every band that asks for nothing, over a book that holds plenty
+        for from in 0..7 {
+            for to in 0..=from {
+                assert_eq!(
+                    book.range_imbalance(from, to),
+                    None,
+                    "range_imbalance({from}, {to}) read a band with no levels in it"
+                );
+            }
+        }
+        // and the first band that does ask for something answers
+        assert!(book.range_imbalance(0, 1).is_some());
+    }
+
+    #[test]
+    fn test_range_imbalance_on_an_unevenly_deep_book() {
+        let mut book = OrderBook::new(None);
+        book.bids.set_price_amount(dec!(100), dec!(4));
+        book.bids.set_price_amount(dec!(99), dec!(4));
+        book.asks.set_price_amount(dec!(101), dec!(2));
+        // the ask side runs out inside the range and contributes what it has
+        assert_eq!(book.range_imbalance(0, 2), Some(dec!(0.6)));
+        // and once the range starts past everything it holds, there is no ratio
+        assert_eq!(book.range_imbalance(1, 2), None);
     }
 
     #[test]

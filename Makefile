@@ -7,6 +7,7 @@ help:
 .PHONY: bench
 bench:			## run the criterion benchmarks
 	@cargo bench --bench arithmetic
+	@cargo bench --bench orderbook
 
 .PHONY: bench-page
 bench-page:		## build the benchmark page into site/index.html
@@ -42,6 +43,10 @@ release:		## tag current version (from Cargo.toml) and push
 	else \
 		echo "Aborted."; \
 	fi
+
+.PHONY: rs-fuzz
+rs-fuzz:		## check the property tests over a far wider sweep, in release
+	@PROPTEST_CASES=$${PROPTEST_CASES:-100000} cargo test --release --test fuzz
 
 .PHONY: rs-lint
 rs-lint:		## Lint rust code

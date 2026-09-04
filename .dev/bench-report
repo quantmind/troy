@@ -660,10 +660,15 @@ Reproduce with <code>make bench-save</code> on your own machine.
 
 def save(run_first: bool) -> None:
     if run_first:
-        command = ["cargo", "bench", "--bench", "arithmetic"]
-        print(" ".join(command), file=sys.stderr)
-        if subprocess.run(command, cwd=ROOT).returncode != 0:
-            sys.exit("cargo bench failed")
+        # every bench, not just the decimals: `collect` reads whatever is under
+        # target/criterion, so running a subset would mix fresh numbers with
+        # whatever a previous session left behind and call the result one
+        # measurement
+        for bench in ("arithmetic", "orderbook"):
+            command = ["cargo", "bench", "--bench", bench]
+            print(" ".join(command), file=sys.stderr)
+            if subprocess.run(command, cwd=ROOT).returncode != 0:
+                sys.exit(f"cargo bench --bench {bench} failed")
 
     if not CRITERION.exists():
         sys.exit(f"no criterion output at {CRITERION} — run `cargo bench` first")
