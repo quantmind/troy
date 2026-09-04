@@ -1,10 +1,11 @@
 name: release
 
 # Triggered by `v*` tags (push one with `make release`). Checks the tag matches
-# the version in Cargo.toml, runs lint and tests, publishes the crate to
-# crates.io, then extracts the matching section from docs/release-notes.md and
-# publishes it as the GitHub Release body. Re-runs idempotently update an
-# existing release rather than failing.
+# the version in Cargo.toml, runs lint, tests and the doc build, and extracts
+# the matching section from docs/release-notes.md - every step that can fail
+# runs before the crates.io publish, which cannot be taken back for a version.
+# It then publishes the crate and the extracted notes as the GitHub Release
+# body. Re-runs idempotently update an existing release rather than failing.
 
 on:
   push:
@@ -55,8 +56,12 @@ jobs:
       - name: tests
         run: make rs-test
 
-      - name: publish to crates.io
-        run: make rs-publish
+      - name: build docs
+        # a rustdoc warning is a broken page on docs.rs, which cannot be
+        # rebuilt for a version once it is published
+        env:
+          RUSTDOCFLAGS: -Dwarnings
+        run: make docs
 
       - name: Extract release notes
         run: |
@@ -72,6 +77,9 @@ jobs:
           fi
           echo "--- extracted notes for ${TAG} ---"
           cat /tmp/notes.md
+
+      - name: publish to crates.io
+        run: make rs-publish
 
       - name: Publish GitHub Release
         run: |

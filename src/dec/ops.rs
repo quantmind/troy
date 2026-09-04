@@ -1,6 +1,6 @@
 use super::core::Dec;
 use std::iter::Sum;
-use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
 /// The product, or [`Dec::NAN`] on overflow or from a NaN operand.
 ///
@@ -27,6 +27,34 @@ impl MulAssign for Dec {
     #[inline(always)]
     fn mul_assign(&mut self, rhs: Self) {
         *self = *self * rhs;
+    }
+}
+
+/// The quotient, or [`Dec::NAN`] on division by zero, on overflow, or from a
+/// NaN operand.
+///
+/// There is no infinity in the type, so dividing by zero has no value to
+/// return; it is the same fault as an overflow and collapses to the same NaN,
+/// which then carries to wherever the result is examined rather than panicking
+/// on a hot path. The quotient is exact at [`Dec::SCALE`] places, with a tie
+/// rounding half away from zero. [`Dec::checked_div`] reports the fault,
+/// [`Dec::saturating_div`] clamps an overflow.
+impl Div for Dec {
+    type Output = Self;
+
+    #[inline(always)]
+    fn div(self, rhs: Self) -> Self {
+        match self.checked_div(rhs) {
+            Some(value) => value,
+            None => Self::NAN,
+        }
+    }
+}
+
+impl DivAssign for Dec {
+    #[inline(always)]
+    fn div_assign(&mut self, rhs: Self) {
+        *self = *self / rhs;
     }
 }
 

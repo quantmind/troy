@@ -8,5 +8,9 @@ if [ "$1" = "fix" ] ; then
 fi
 
 
+# without this the script exits with clippy's status alone, so a formatting
+# failure in --check mode passes CI silently
+set -e
+
 cargo fmt ${FMT_ARG}
 cargo clippy ${CLIPPY_ARG}

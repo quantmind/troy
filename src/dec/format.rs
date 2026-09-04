@@ -102,6 +102,39 @@ impl fmt::Debug for Dec {
 }
 
 #[cfg(test)]
+mod rendering {
+    #![allow(clippy::unwrap_used)]
+
+    use crate::Dec;
+    use crate::dec;
+    use std::str::FromStr;
+
+    #[test]
+    fn test_parse_and_display_round_trip() {
+        for text in [
+            "0",
+            "1",
+            "-1",
+            "0.5",
+            "-0.5",
+            "100000.5",
+            "0.000000000000000001",
+            "-12345.6789",
+        ] {
+            let value = Dec::from_str(text).unwrap();
+            assert_eq!(value.to_string(), text, "round trip of {text}");
+        }
+    }
+
+    #[test]
+    fn test_debug_matches_display() {
+        for value in [dec!(1.5), dec!(-0.25), Dec::ZERO, Dec::MIN, Dec::MAX] {
+            assert_eq!(format!("{value:?}"), format!("{value}"));
+        }
+    }
+}
+
+#[cfg(test)]
 mod formatting_bounds {
     #![allow(clippy::unwrap_used)]
 

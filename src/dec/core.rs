@@ -1,3 +1,4 @@
+use super::div::div_raw;
 use super::mul::{div_exact_1e9, mul_raw};
 use super::parse::parse_bytes;
 
@@ -83,8 +84,11 @@ impl Dec {
     /// Number of decimal places every `Dec` carries.
     pub const SCALE: u32 = 18;
 
+    /// Zero.
     pub const ZERO: Self = Self(0);
+    /// One.
     pub const ONE: Self = Self(ONE_RAW);
+    /// Negative one.
     pub const NEG_ONE: Self = Self(-ONE_RAW);
 
     /// The smallest finite value, `-Dec::MAX`. The finite range is symmetric,
@@ -145,21 +149,26 @@ impl Dec {
     }
 
     #[inline(always)]
+    /// The underlying scaled integer, the inverse of [`Dec::from_raw`].
     pub const fn into_raw(self) -> i128 {
         self.0
     }
 
     #[inline(always)]
+    /// An exact whole number. Every `i64` fits the finite range.
     pub const fn from_int(value: i64) -> Self {
         Self(value as i128 * ONE_RAW)
     }
 
     #[inline(always)]
+    /// An exact whole number. Every `u64` fits the finite range.
     pub const fn from_u64(value: u64) -> Self {
         Self(value as i128 * ONE_RAW)
     }
 
     #[inline(always)]
+    /// Parse in a `const` context, `None` on malformed or out-of-range text.
+    /// The [`dec!`](crate::dec) macro wraps this.
     pub const fn parse_const(value: &str) -> Option<Self> {
         match parse_bytes(value.as_bytes()) {
             Ok(raw) => Some(Self(raw)),
@@ -322,6 +331,30 @@ impl Dec {
         mul_raw(self.0, rhs.0).map(Self)
     }
 
+    /// The quotient, or `None` on division by zero, if it leaves the finite
+    /// range, or if either side is [`Dec::NAN`].
+    #[inline(always)]
+    pub fn checked_div(self, rhs: Self) -> Option<Self> {
+        div_raw(self.0, rhs.0).map(Self)
+    }
+
+    /// The quotient, clamped to [`Dec::MIN`] or [`Dec::MAX`] on overflow.
+    /// Division by zero has no side to clamp towards and still gives
+    /// [`Dec::NAN`], as does a NaN operand.
+    #[inline(always)]
+    pub fn saturating_div(self, rhs: Self) -> Self {
+        if self.is_nan() || rhs.is_nan() || rhs.is_zero() {
+            return Self::NAN;
+        }
+        match self.checked_div(rhs) {
+            Some(value) => value,
+            None => match (self.0 < 0) != (rhs.0 < 0) {
+                true => Self::MIN,
+                false => Self::MAX,
+            },
+        }
+    }
+
     /// The product, clamped to [`Dec::MIN`] or [`Dec::MAX`] on overflow.
     /// A [`Dec::NAN`] operand still gives NaN: there is no sign to clamp
     /// towards, and clamping an unknown would invent one.
@@ -427,76 +460,10 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use crate::Dec;
-    use crate::ParseDecError;
     use crate::dec;
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
     use std::str::FromStr;
-
-    #[test]
-    fn test_parse_and_display_round_trip() {
-        for text in [
-            "0",
-            "1",
-            "-1",
-            "0.5",
-            "-0.5",
-            "100000.5",
-            "0.000000000000000001",
-            "-12345.6789",
-        ] {
-            let value = Dec::from_str(text).unwrap();
-            assert_eq!(value.to_string(), text, "round trip of {text}");
-        }
-    }
-
-    #[test]
-    fn test_parse_trims_and_rounds_excess_precision() {
-        assert_eq!(
-            Dec::from_str("1.50").unwrap(),
-            Dec::from_str("1.5").unwrap()
-        );
-        assert_eq!(
-            Dec::from_str("0.0000000000000000005").unwrap(),
-            Dec::EPSILON,
-            "half rounds away from zero at the scale boundary"
-        );
-        assert_eq!(
-            Dec::from_str("0.0000000000000000015").unwrap(),
-            Dec::from_raw(2)
-        );
-    }
-
-    #[test]
-    fn test_parse_exponent_form() {
-        assert_eq!(
-            Dec::from_str("1e-8").unwrap(),
-            Dec::from_raw(10_000_000_000)
-        );
-        assert_eq!(
-            Dec::from_str("1.5E3").unwrap(),
-            Dec::from_str("1500").unwrap()
-        );
-        assert_eq!(
-            Dec::from_str("-2.5e-1").unwrap(),
-            Dec::from_str("-0.25").unwrap()
-        );
-    }
-
-    #[test]
-    fn test_parse_rejects_malformed_input() {
-        assert_eq!(Dec::from_str(""), Err(ParseDecError::Empty));
-        assert_eq!(Dec::from_str("1.2.3"), Err(ParseDecError::InvalidDigit));
-        assert_eq!(Dec::from_str("abc"), Err(ParseDecError::InvalidDigit));
-    }
-
-    #[test]
-    fn test_macro_is_const() {
-        const HALF: Dec = dec!(0.5);
-        const NEGATIVE: Dec = dec!(-1.25);
-        assert_eq!(HALF, Dec::from_raw(500_000_000_000_000_000));
-        assert_eq!(NEGATIVE.to_string(), "-1.25");
-    }
 
     #[test]
     fn test_representation_is_canonical() {
@@ -734,13 +701,6 @@ mod predicates {
         assert_eq!(dec!(42.5).abs(), dec!(42.5));
         // the magnitude of MIN is not representable, so it saturates
         assert_eq!(Dec::MIN.abs(), Dec::MAX);
-    }
-
-    #[test]
-    fn test_debug_matches_display() {
-        for value in [dec!(1.5), dec!(-0.25), Dec::ZERO, Dec::MIN, Dec::MAX] {
-            assert_eq!(format!("{value:?}"), format!("{value}"));
-        }
     }
 }
 

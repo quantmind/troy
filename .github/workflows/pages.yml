@@ -1,0 +1,47 @@
+name: pages
+
+# Publishes the benchmark page to GitHub Pages from the committed snapshot in
+# docs/bench-data.json. The numbers are measured on a known machine and
+# committed deliberately — a shared CI runner varies by more than the
+# differences being measured, so nothing here runs `cargo bench`.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/bench-data.json
+      - .dev/bench-report
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# a queued deploy waits for the running one rather than cancelling it, so the
+# published page always reflects the last commit rather than the last start
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build the benchmark page
+        run: .dev/bench-report html --out site/index.html
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

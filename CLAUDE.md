@@ -2,7 +2,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Goal
 
-Troy provides superfast numeric primitives for High Frequency Trading, where every nanosecond counts. Correctness and performance are the top priorities: the crate is a fixed-scale decimal type for fast, exact arithmetic, written in safe Rust (`unsafe` is forbidden).
+Troy provides superfast primitives and data structures for High Frequency Trading, where every nanosecond counts. Correctness and performance are the top priorities. The crate is written in safe Rust (`unsafe` is forbidden) and holds two things: `Dec`, a fixed-scale decimal for fast exact arithmetic, and `OrderBook`, a level 2 book built on it.
 
 ## Build & Test
 
@@ -29,8 +29,21 @@ make rs-test           # test with all features
 ## Benchmarks
 
 ```bash
-cargo bench            # run the criterion benchmarks
+make bench             # run the criterion benchmarks
+make bench-save        # run them and record docs/bench-data.json
+make bench-page        # render that snapshot into site/index.html
+make bench-report      # open criterion's own report (violin, PDF, sweeps)
 ```
+
+criterion's report lives in `target/criterion` and is ~30 MB of SVG, so it
+stays a local tool. The published page carries the curated summary and the
+digit sweeps, both rendered from the snapshot.
+
+`docs/bench-data.json` is a committed snapshot measured on a known machine,
+carrying the CPU, rustc version and commit it came from. `.dev/bench-report`
+reads criterion's JSON and renders both the terminal table and the page that
+`.github/workflows/pages.yml` publishes to GitHub Pages. CI never measures:
+a shared runner varies by more than the differences the page reports.
 
 ## Alternatives Crates
 
