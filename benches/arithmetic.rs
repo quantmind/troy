@@ -1,4 +1,7 @@
-use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
+//! `Dec` against `rust_decimal`, `fastnum` and native `f64`, over the
+//! operations a trading system runs on a hot path.
+
+use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use fastnum::D128;
 use fastnum::decimal::Context;
 use rust_decimal::Decimal;
@@ -56,6 +59,7 @@ fn columns() -> (Column, Column) {
 fn bench_add(c: &mut Criterion) {
     let (prices, _) = columns();
     let mut group = c.benchmark_group("add");
+    group.throughput(Throughput::Elements(COUNT as u64));
 
     group.bench_function(BenchmarkId::new("f64", COUNT), |b| {
         b.iter(|| {
@@ -99,8 +103,8 @@ fn bench_add(c: &mut Criterion) {
 fn bench_mul_div(c: &mut Criterion) {
     let (prices, sizes) = columns();
 
-    // Dec has no multiply or divide yet; these arms are the target to beat
     let mut group = c.benchmark_group("mul");
+    group.throughput(Throughput::Elements(COUNT as u64));
     group.bench_function(BenchmarkId::new("f64", COUNT), |b| {
         b.iter(|| {
             for (price, size) in black_box(&prices.floats).iter().zip(&sizes.floats) {
@@ -132,10 +136,18 @@ fn bench_mul_div(c: &mut Criterion) {
     group.finish();
 
     let mut group = c.benchmark_group("div");
+    group.throughput(Throughput::Elements(COUNT as u64));
     group.bench_function(BenchmarkId::new("f64", COUNT), |b| {
         b.iter(|| {
             for (price, size) in black_box(&prices.floats).iter().zip(&sizes.floats) {
                 black_box(price / size);
+            }
+        })
+    });
+    group.bench_function(BenchmarkId::new("Dec", COUNT), |b| {
+        b.iter(|| {
+            for (price, size) in black_box(&prices.decs).iter().zip(&sizes.decs) {
+                black_box(*price / *size);
             }
         })
     });
@@ -159,6 +171,7 @@ fn bench_mul_div(c: &mut Criterion) {
 fn bench_cmp(c: &mut Criterion) {
     let (prices, sizes) = columns();
     let mut group = c.benchmark_group("cmp");
+    group.throughput(Throughput::Elements(COUNT as u64));
 
     group.bench_function(BenchmarkId::new("f64", COUNT), |b| {
         b.iter(|| {
@@ -202,6 +215,7 @@ fn bench_cmp(c: &mut Criterion) {
 fn bench_f64_boundary(c: &mut Criterion) {
     let (prices, _) = columns();
     let mut group = c.benchmark_group("to_f64");
+    group.throughput(Throughput::Elements(COUNT as u64));
 
     group.bench_function(BenchmarkId::new("Dec", COUNT), |b| {
         b.iter(|| {
@@ -227,6 +241,7 @@ fn bench_f64_boundary(c: &mut Criterion) {
     group.finish();
 
     let mut group = c.benchmark_group("from_f64");
+    group.throughput(Throughput::Elements(COUNT as u64));
     group.bench_function(BenchmarkId::new("Dec", COUNT), |b| {
         b.iter(|| {
             for value in black_box(&prices.floats) {
@@ -254,6 +269,7 @@ fn bench_f64_boundary(c: &mut Criterion) {
 fn bench_parse(c: &mut Criterion) {
     let (prices, _) = columns();
     let mut group = c.benchmark_group("parse");
+    group.throughput(Throughput::Elements(COUNT as u64));
 
     group.bench_function(BenchmarkId::new("f64", COUNT), |b| {
         b.iter(|| {
@@ -297,6 +313,7 @@ fn bench_parse(c: &mut Criterion) {
 fn bench_format(c: &mut Criterion) {
     let (prices, _) = columns();
     let mut group = c.benchmark_group("format");
+    group.throughput(Throughput::Elements(COUNT as u64));
 
     group.bench_function(BenchmarkId::new("f64", COUNT), |b| {
         b.iter(|| {
@@ -337,12 +354,14 @@ fn bench_format(c: &mut Criterion) {
     group.finish();
 }
 
+// plots stay on: criterion renders the per-parameter line charts that the
+// digit-width groups below exist to produce, and the violin comparisons for
+// the fixed-width ones
 fn config() -> Criterion {
     Criterion::default()
         .warm_up_time(Duration::from_millis(200))
         .measurement_time(Duration::from_millis(600))
         .sample_size(20)
-        .without_plots()
 }
 
 fn bench_round_dp(c: &mut Criterion) {
@@ -350,6 +369,7 @@ fn bench_round_dp(c: &mut Criterion) {
     // scale-carrying type; the prices column has exactly 2 and would be a no-op
     let (_, prices) = columns();
     let mut group = c.benchmark_group("round_dp");
+    group.throughput(Throughput::Elements(COUNT as u64));
 
     // f64 has no scale, so the analogue is a scale-round-unscale round trip
     group.bench_function(BenchmarkId::new("f64", COUNT), |b| {
@@ -391,6 +411,7 @@ fn bench_round_to_step(c: &mut Criterion) {
     let step_decimal = Decimal::from_str("0.01").unwrap();
     let step_fastnum = D128::from_str("0.01", Context::default()).unwrap();
     let mut group = c.benchmark_group("round_to_step");
+    group.throughput(Throughput::Elements(COUNT as u64));
 
     group.bench_function(BenchmarkId::new("f64", COUNT), |b| {
         b.iter(|| {
@@ -426,6 +447,7 @@ fn bench_round_to_step(c: &mut Criterion) {
 fn bench_floor(c: &mut Criterion) {
     let (prices, _) = columns();
     let mut group = c.benchmark_group("floor");
+    group.throughput(Throughput::Elements(COUNT as u64));
 
     group.bench_function(BenchmarkId::new("f64", COUNT), |b| {
         b.iter(|| {
@@ -461,6 +483,7 @@ fn bench_floor(c: &mut Criterion) {
 fn bench_ceil(c: &mut Criterion) {
     let (prices, _) = columns();
     let mut group = c.benchmark_group("ceil");
+    group.throughput(Throughput::Elements(COUNT as u64));
 
     group.bench_function(BenchmarkId::new("f64", COUNT), |b| {
         b.iter(|| {
@@ -493,6 +516,197 @@ fn bench_ceil(c: &mut Criterion) {
     group.finish();
 }
 
+// the digit widths the parse groups sweep. The parser accumulates in a u64 and
+// promotes to u128 once a mantissa passes 19 digits, so the interesting shape
+// is either side of that crossing rather than a handful of round numbers.
+const WIDTHS: [u32; 8] = [1, 4, 8, 12, 18, 19, 22, 26];
+
+// `digits` significant digits with the point in the middle, which is the shape
+// a price or a size arrives in rather than a bare integer
+fn digit_samples(digits: u32) -> Vec<String> {
+    let mut state = 0x2545_F491_4F6C_DD1D_u64;
+    let integer_digits = digits.div_ceil(2);
+    let fraction_digits = digits - integer_digits;
+    (0..COUNT)
+        .map(|_| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            let mut text = String::with_capacity(digits as usize + 1);
+            let mut next = state;
+            for position in 0..digits {
+                if position == integer_digits && fraction_digits > 0 {
+                    text.push('.');
+                }
+                next = next.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+                let draw = (next >> 60) as u8;
+                // never a leading zero, so every sample really carries `digits`
+                let digit = match position {
+                    0 => draw % 9 + 1,
+                    _ => draw % 10,
+                };
+                text.push((b'0' + digit) as char);
+            }
+            text
+        })
+        .collect()
+}
+
+fn bench_parse_digits(c: &mut Criterion) {
+    let mut group = c.benchmark_group("parse_digits");
+    group.throughput(Throughput::Elements(COUNT as u64));
+
+    for digits in WIDTHS {
+        let texts = digit_samples(digits);
+        group.bench_function(BenchmarkId::new("f64", digits), |b| {
+            b.iter(|| {
+                let mut total = 0.0;
+                for text in black_box(&texts) {
+                    total += f64::from_str(text).unwrap_or_default();
+                }
+                total
+            })
+        });
+        group.bench_function(BenchmarkId::new("Dec", digits), |b| {
+            b.iter(|| {
+                let mut total = Dec::ZERO;
+                for text in black_box(&texts) {
+                    total += Dec::from_str(text).unwrap_or_default();
+                }
+                total
+            })
+        });
+        group.bench_function(BenchmarkId::new("rust_decimal", digits), |b| {
+            b.iter(|| {
+                let mut total = Decimal::ZERO;
+                for text in black_box(&texts) {
+                    total += Decimal::from_str(text).unwrap_or_default();
+                }
+                total
+            })
+        });
+        group.bench_function(BenchmarkId::new("fastnum", digits), |b| {
+            b.iter(|| {
+                let mut total = D128::ZERO;
+                for text in black_box(&texts) {
+                    total += D128::from_str(text, Context::default()).unwrap_or(D128::ZERO);
+                }
+                total
+            })
+        });
+    }
+    group.finish();
+}
+
+fn bench_format_digits(c: &mut Criterion) {
+    let mut group = c.benchmark_group("format_digits");
+    group.throughput(Throughput::Elements(COUNT as u64));
+
+    for digits in WIDTHS {
+        let texts = digit_samples(digits);
+        let decs: Vec<Dec> = texts.iter().filter_map(|t| t.parse().ok()).collect();
+        let decimals: Vec<Decimal> = texts.iter().filter_map(|t| t.parse().ok()).collect();
+        let fastnums: Vec<D128> = texts
+            .iter()
+            .filter_map(|t| D128::from_str(t, Context::default()).ok())
+            .collect();
+
+        group.bench_function(BenchmarkId::new("Dec", digits), |b| {
+            b.iter(|| {
+                let mut length = 0;
+                for value in black_box(&decs) {
+                    length += value.to_string().len();
+                }
+                length
+            })
+        });
+        group.bench_function(BenchmarkId::new("rust_decimal", digits), |b| {
+            b.iter(|| {
+                let mut length = 0;
+                for value in black_box(&decimals) {
+                    length += value.to_string().len();
+                }
+                length
+            })
+        });
+        group.bench_function(BenchmarkId::new("fastnum", digits), |b| {
+            b.iter(|| {
+                let mut length = 0;
+                for value in black_box(&fastnums) {
+                    length += value.to_string().len();
+                }
+                length
+            })
+        });
+    }
+    group.finish();
+}
+
+// Ingesting a book or a trade feed means filling a vector, not touching one
+// value: this pays for the allocation and for every byte the element occupies,
+// which is where a 16-byte decimal separates from a wider one.
+fn bench_collect(c: &mut Criterion) {
+    let (prices, _) = columns();
+    let mut group = c.benchmark_group("collect");
+    group.throughput(Throughput::Elements(COUNT as u64));
+
+    group.bench_function(BenchmarkId::new("f64", COUNT), |b| {
+        b.iter(|| {
+            black_box(&prices.texts)
+                .iter()
+                .filter_map(|text| f64::from_str(text).ok())
+                .collect::<Vec<_>>()
+        })
+    });
+    group.bench_function(BenchmarkId::new("Dec", COUNT), |b| {
+        b.iter(|| {
+            black_box(&prices.texts)
+                .iter()
+                .filter_map(|text| Dec::from_str(text).ok())
+                .collect::<Vec<_>>()
+        })
+    });
+    group.bench_function(BenchmarkId::new("rust_decimal", COUNT), |b| {
+        b.iter(|| {
+            black_box(&prices.texts)
+                .iter()
+                .filter_map(|text| Decimal::from_str(text).ok())
+                .collect::<Vec<_>>()
+        })
+    });
+    group.bench_function(BenchmarkId::new("fastnum", COUNT), |b| {
+        b.iter(|| {
+            black_box(&prices.texts)
+                .iter()
+                .filter_map(|text| D128::from_str(text, Context::default()).ok())
+                .collect::<Vec<_>>()
+        })
+    });
+    group.finish();
+}
+
+// the same vector without the parsing, so the allocation and the copy are the
+// whole measurement and the element width is the only variable left
+fn bench_clone(c: &mut Criterion) {
+    let (prices, _) = columns();
+    let mut group = c.benchmark_group("clone");
+    group.throughput(Throughput::Elements(COUNT as u64));
+
+    group.bench_function(BenchmarkId::new("f64", COUNT), |b| {
+        b.iter(|| black_box(&prices.floats).clone())
+    });
+    group.bench_function(BenchmarkId::new("Dec", COUNT), |b| {
+        b.iter(|| black_box(&prices.decs).clone())
+    });
+    group.bench_function(BenchmarkId::new("rust_decimal", COUNT), |b| {
+        b.iter(|| black_box(&prices.decimals).clone())
+    });
+    group.bench_function(BenchmarkId::new("fastnum", COUNT), |b| {
+        b.iter(|| black_box(&prices.fastnums).clone())
+    });
+    group.finish();
+}
+
 criterion_group! {
     name = benches;
     config = config();
@@ -507,5 +721,9 @@ criterion_group! {
         bench_f64_boundary,
         bench_parse,
         bench_format,
+        bench_parse_digits,
+        bench_format_digits,
+        bench_collect,
+        bench_clone,
 }
 criterion_main!(benches);

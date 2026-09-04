@@ -1,3 +1,4 @@
+use super::div::div_raw;
 use super::mul::{div_exact_1e9, mul_raw};
 use super::parse::parse_bytes;
 
@@ -83,8 +84,11 @@ impl Dec {
     /// Number of decimal places every `Dec` carries.
     pub const SCALE: u32 = 18;
 
+    /// Zero.
     pub const ZERO: Self = Self(0);
+    /// One.
     pub const ONE: Self = Self(ONE_RAW);
+    /// Negative one.
     pub const NEG_ONE: Self = Self(-ONE_RAW);
 
     /// The smallest finite value, `-Dec::MAX`. The finite range is symmetric,
@@ -145,21 +149,26 @@ impl Dec {
     }
 
     #[inline(always)]
+    /// The underlying scaled integer, the inverse of [`Dec::from_raw`].
     pub const fn into_raw(self) -> i128 {
         self.0
     }
 
     #[inline(always)]
+    /// An exact whole number. Every `i64` fits the finite range.
     pub const fn from_int(value: i64) -> Self {
         Self(value as i128 * ONE_RAW)
     }
 
     #[inline(always)]
+    /// An exact whole number. Every `u64` fits the finite range.
     pub const fn from_u64(value: u64) -> Self {
         Self(value as i128 * ONE_RAW)
     }
 
     #[inline(always)]
+    /// Parse in a `const` context, `None` on malformed or out-of-range text.
+    /// The [`dec!`](crate::dec) macro wraps this.
     pub const fn parse_const(value: &str) -> Option<Self> {
         match parse_bytes(value.as_bytes()) {
             Ok(raw) => Some(Self(raw)),
@@ -320,6 +329,30 @@ impl Dec {
     #[inline(always)]
     pub fn checked_mul(self, rhs: Self) -> Option<Self> {
         mul_raw(self.0, rhs.0).map(Self)
+    }
+
+    /// The quotient, or `None` on division by zero, if it leaves the finite
+    /// range, or if either side is [`Dec::NAN`].
+    #[inline(always)]
+    pub fn checked_div(self, rhs: Self) -> Option<Self> {
+        div_raw(self.0, rhs.0).map(Self)
+    }
+
+    /// The quotient, clamped to [`Dec::MIN`] or [`Dec::MAX`] on overflow.
+    /// Division by zero has no side to clamp towards and still gives
+    /// [`Dec::NAN`], as does a NaN operand.
+    #[inline(always)]
+    pub fn saturating_div(self, rhs: Self) -> Self {
+        if self.is_nan() || rhs.is_nan() || rhs.is_zero() {
+            return Self::NAN;
+        }
+        match self.checked_div(rhs) {
+            Some(value) => value,
+            None => match (self.0 < 0) != (rhs.0 < 0) {
+                true => Self::MIN,
+                false => Self::MAX,
+            },
+        }
     }
 
     /// The product, clamped to [`Dec::MIN`] or [`Dec::MAX`] on overflow.

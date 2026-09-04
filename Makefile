@@ -21,6 +21,26 @@ docs:			## build the rust documentation
 docs-open:		## build the rust documentation and open it in the browser
 	@cargo doc --all-features --no-deps --open
 
+.PHONY: bench
+bench:			## run the criterion benchmarks
+	@cargo bench --bench arithmetic
+
+.PHONY: bench-save
+bench-save:		## run the benchmarks and commit the numbers to docs/bench-data.json
+	@.dev/bench-report save --run
+
+.PHONY: bench-table
+bench-table:		## print the benchmark snapshot as a table
+	@.dev/bench-report table
+
+.PHONY: bench-report
+bench-report:		## open criterion's own report: violin, PDF and per-parameter charts
+	@python3 -c "import webbrowser; webbrowser.open('file://$(PWD)/target/criterion/report/index.html')"
+
+.PHONY: bench-page
+bench-page:		## build the benchmark page into site/index.html
+	@.dev/bench-report html
+
 .PHONY: rs-publish
 rs-publish:		## publish the crate to crates.io
 	@cargo publish --token $(CARGO_REGISTRY_TOKEN)

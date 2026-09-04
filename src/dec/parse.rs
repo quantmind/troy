@@ -3,9 +3,13 @@ use std::fmt;
 use std::str::FromStr;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Why a decimal failed to parse.
 pub enum ParseDecError {
+    /// No digits in the text.
     Empty,
+    /// A character that cannot appear in a decimal.
     InvalidDigit,
+    /// The value lies outside the finite range.
     Overflow,
 }
 

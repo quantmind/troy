@@ -33,6 +33,11 @@ jobs:
       - name: Test
         run: make rs-test
 
+      - name: Benchmarks
+        # --test runs each benchmark once instead of measuring it: enough to
+        # catch a bench that stopped compiling, fast enough for every PR
+        run: cargo bench --bench arithmetic -- --test
+
       - name: Docs
         # warnings are errors here, so a broken intra-doc link fails the build
         # rather than shipping a dead link to docs.rs

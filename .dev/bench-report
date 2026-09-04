@@ -1,0 +1,712 @@
+#!/usr/bin/env python3
+"""Turn criterion's JSON output into a benchmark snapshot, a terminal table and
+a standalone HTML page.
+
+criterion writes one directory per benchmark under target/criterion, each
+holding a benchmark.json naming it and an estimates.json carrying the timing
+distribution. Reading those is exact, where scraping the human-readable stdout
+is a guess at a moving format.
+
+    .dev/bench-report save [--run]   collect into docs/bench-data.json
+    .dev/bench-report table          print the snapshot as a terminal table
+    .dev/bench-report html [-o P]    render the snapshot as a web page
+
+Published numbers come from a committed snapshot rather than a CI run, because
+a shared runner's timings vary by more than the differences being measured.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import platform
+import re
+import subprocess
+import sys
+from datetime import datetime, timezone
+from html import escape
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+CRITERION = ROOT / "target" / "criterion"
+SNAPSHOT = ROOT / "docs" / "bench-data.json"
+PAGE = ROOT / "site" / "index.html"
+
+# the order operations are presented in, cheapest kind of work first
+OPERATIONS = [
+    ("cmp", "Compare two values"),
+    ("add", "Add into an accumulator"),
+    ("mul", "Multiply price by size"),
+    ("div", "Divide price by size"),
+    ("round_dp", "Round to 2 decimal places"),
+    ("round_to_step", "Round to a 0.01 step"),
+    ("floor", "Floor to an integer"),
+    ("ceil", "Ceiling to an integer"),
+    ("to_f64", "Convert to f64"),
+    ("from_f64", "Convert from f64"),
+    ("parse", "Parse from a string"),
+    ("format", "Format to a string"),
+    ("collect", "Parse a batch into a fresh Vec"),
+    ("clone", "Allocate and copy a Vec"),
+]
+
+# groups swept over a parameter rather than measured at one width: these are
+# read as a curve, so they get a line chart instead of a row in the table
+SWEEPS = [
+    (
+        "parse_digits",
+        "Parsing by digit width",
+        "Significant digits in the text",
+        "The parser accumulates in a u64 and promotes to u128 once a mantissa "
+        "passes 19 digits, so the cost of that promotion is visible as the "
+        "curve steepens past the boundary.",
+    ),
+    (
+        "format_digits",
+        "Formatting by digit width",
+        "Significant digits in the value",
+        "Rendering walks the digits it has, so the curve is the cost of the "
+        "digits themselves rather than of any one value.",
+    ),
+]
+
+# f64 leads as the inexact reference the decimals are measured against
+IMPLEMENTATIONS = ["f64", "Dec", "rust_decimal", "fastnum"]
+DECIMALS = ["Dec", "rust_decimal", "fastnum"]
+
+
+# --------------------------------------------------------------------------
+# collection
+
+
+def machine() -> dict[str, str]:
+    """Provenance for the numbers: timings without a machine are not a result."""
+
+    def run(*command: str) -> str:
+        try:
+            out = subprocess.run(command, capture_output=True, text=True, cwd=ROOT)
+        except OSError:
+            return "unknown"
+        return out.stdout.strip() if out.returncode == 0 else "unknown"
+
+    cpu = platform.processor() or "unknown"
+    cpuinfo = Path("/proc/cpuinfo")
+    if cpuinfo.exists():
+        found = re.search(r"^model name\s*:\s*(.+)$", cpuinfo.read_text(), re.M)
+        if found:
+            cpu = found.group(1).strip()
+
+    commit = run("git", "rev-parse", "--short", "HEAD")
+    if run("git", "status", "--porcelain"):
+        commit += " (modified)"
+
+    return {
+        "cpu": cpu,
+        "arch": platform.machine(),
+        "os": platform.platform(terse=True),
+        "rustc": run("rustc", "--version"),
+        "commit": commit,
+        "measured": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+    }
+
+
+def collect(directory: Path) -> list[dict]:
+    """Read every criterion benchmark under `directory`.
+
+    Timings are divided by the sample count baked into the benchmark id, so
+    every number on the page is nanoseconds for a single operation.
+    """
+    results = []
+    for estimates_path in sorted(directory.glob("*/*/*/new/estimates.json")):
+        identity_path = estimates_path.parent / "benchmark.json"
+        if not identity_path.exists():
+            continue
+        identity = json.loads(identity_path.read_text())
+        estimates = json.loads(estimates_path.read_text())
+
+        # criterion records how many values one iteration covers, which is the
+        # only safe divisor: in a swept group the benchmark id is the swept
+        # parameter, not a count, and dividing by it would be nonsense
+        throughput = identity.get("throughput") or {}
+        count = throughput.get("Elements")
+        if count is None:
+            try:
+                count = int(identity["value_str"])
+            except (KeyError, TypeError, ValueError):
+                continue
+        if not isinstance(count, int) or count <= 0:
+            continue
+
+        median = estimates["median"]
+        interval = median["confidence_interval"]
+        results.append(
+            {
+                "operation": identity["group_id"],
+                "implementation": identity["function_id"],
+                "parameter": identity.get("value_str"),
+                "count": count,
+                "nanos": median["point_estimate"] / count,
+                "low": interval["lower_bound"] / count,
+                "high": interval["upper_bound"] / count,
+            }
+        )
+    return results
+
+
+def load(path: Path) -> dict:
+    if not path.exists():
+        sys.exit(f"no snapshot at {path} — run `make bench-save` first")
+    return json.loads(path.read_text())
+
+
+def timings(snapshot: dict) -> dict[tuple[str, str], dict]:
+    return {(r["operation"], r["implementation"]): r for r in snapshot["results"]}
+
+
+def sweep_series(snapshot: dict, operation: str) -> dict[str, list[tuple[int, float]]]:
+    """Per implementation, the curve of (parameter, ns) sorted by parameter."""
+    series: dict[str, list[tuple[int, float]]] = {}
+    for record in snapshot["results"]:
+        if record["operation"] != operation:
+            continue
+        try:
+            parameter = int(record["parameter"])
+        except (TypeError, ValueError):
+            continue
+        series.setdefault(record["implementation"], []).append(
+            (parameter, record["nanos"])
+        )
+    return {name: sorted(points) for name, points in series.items() if points}
+
+
+def fastest_decimal(table: dict, operation: str) -> float | None:
+    candidates = [
+        table[(operation, name)]["nanos"]
+        for name in DECIMALS
+        if (operation, name) in table
+    ]
+    return min(candidates) if candidates else None
+
+
+def present(snapshot: dict) -> list[tuple[str, str]]:
+    """Operations that actually have a measurement, in presentation order."""
+    table = timings(snapshot)
+    return [
+        (operation, caption)
+        for operation, caption in OPERATIONS
+        if any((operation, name) in table for name in IMPLEMENTATIONS)
+    ]
+
+
+def present_sweeps(snapshot: dict) -> list[tuple]:
+    return [sweep for sweep in SWEEPS if sweep_series(snapshot, sweep[0])]
+
+
+# --------------------------------------------------------------------------
+# terminal table
+
+
+def render_table(snapshot: dict) -> str:
+    table = timings(snapshot)
+    rows = present(snapshot)
+    width = max(len(operation) for operation, _ in rows) + 2
+
+    lines = [""]
+    for key, label in (("cpu", "cpu"), ("rustc", "rustc"), ("commit", "commit")):
+        lines.append(f"{label:>7}: {snapshot['machine'][key]}")
+    lines.append("\nns per operation\n")
+
+    header = "op".ljust(width) + "".join(name.rjust(14) for name in IMPLEMENTATIONS)
+    lines += [header, "-" * len(header)]
+
+    for operation, _ in rows:
+        best = fastest_decimal(table, operation)
+        cells = ""
+        for name in IMPLEMENTATIONS:
+            record = table.get((operation, name))
+            if record is None:
+                cells += "-".rjust(14)
+            else:
+                mark = "*" if record["nanos"] == best else " "
+                cells += f"{record['nanos']:>13.2f}" + mark
+        lines.append(operation.ljust(width) + cells)
+
+    lines.append("\n* fastest decimal")
+    return "\n".join(lines)
+
+
+# --------------------------------------------------------------------------
+# page
+#
+# Colors come from the validated categorical palette. f64 is drawn in neutral
+# ink rather than a categorical hue: it is the inexact reference the decimals
+# are measured against, not a fourth competitor. That leaves three series,
+# which clear the CVD and normal-vision floors on every pair in both modes.
+
+STYLE = """
+:root {
+  color-scheme: light;
+  --plane: #f9f9f7;
+  --surface: #fcfcfb;
+  --ink: #0b0b0b;
+  --ink-soft: #52514e;
+  --ink-muted: #898781;
+  --rule: #e1e0d9;
+  --border: rgba(11, 11, 11, 0.1);
+  --reference: #c3c2b7;
+  --reference-ink: #6f6e69;
+  --dec: #2a78d6;
+  --rust-decimal: #eb6834;
+  --fastnum: #1baf7a;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --plane: #0d0d0d;
+    --surface: #1a1a19;
+    --ink: #ffffff;
+    --ink-soft: #c3c2b7;
+    --ink-muted: #898781;
+    --rule: #2c2c2a;
+    --border: rgba(255, 255, 255, 0.1);
+    --reference: #55554f;
+    --reference-ink: #a3a29b;
+    --dec: #3987e5;
+    --rust-decimal: #d95926;
+    --fastnum: #199e70;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --plane: #0d0d0d;
+  --surface: #1a1a19;
+  --ink: #ffffff;
+  --ink-soft: #c3c2b7;
+  --ink-muted: #898781;
+  --rule: #2c2c2a;
+  --border: rgba(255, 255, 255, 0.1);
+  --reference: #55554f;
+  --reference-ink: #a3a29b;
+  --dec: #3987e5;
+  --rust-decimal: #d95926;
+  --fastnum: #199e70;
+}
+
+body {
+  margin: 0;
+  background: var(--plane);
+  color: var(--ink);
+  font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.wrap { max-width: 1080px; margin: 0 auto; padding: 48px 24px 96px; }
+
+header { border-bottom: 1px solid var(--rule); padding-bottom: 28px; }
+h1 { font-size: 30px; line-height: 1.2; margin: 0 0 8px; letter-spacing: -0.02em; }
+.lede { margin: 0; max-width: 62ch; color: var(--ink-soft); }
+.provenance {
+  display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px;
+  font-size: 12.5px; color: var(--ink-soft);
+}
+.chip {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 999px; padding: 3px 11px;
+}
+.chip b { color: var(--ink-muted); font-weight: 500; }
+
+h2 { font-size: 19px; margin: 48px 0 6px; letter-spacing: -0.01em; }
+h2 + p { margin: 0 0 20px; color: var(--ink-soft); max-width: 62ch; font-size: 14px; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 18px; margin: 0 0 24px; font-size: 13px; }
+.legend span { display: flex; align-items: center; gap: 7px; color: var(--ink-soft); }
+.swatch { width: 11px; height: 11px; border-radius: 3px; flex: none; }
+
+.grid {
+  display: grid; gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+}
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 15px 16px 13px;
+}
+.card h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.card .caption { margin: 1px 0 13px; font-size: 12px; color: var(--ink-muted); }
+
+.bars { display: flex; flex-direction: column; gap: 8px; }
+.bar-row {
+  display: grid; grid-template-columns: 88px 1fr auto;
+  align-items: center; gap: 10px; font-size: 12px;
+}
+.bar-name { color: var(--ink-soft); text-align: right; }
+/* the track is the full width of the slowest bar in this chart, so every
+   chart is read on its own scale — cmp at 4ns and parse at 100ns do not
+   share an axis */
+.track { height: 13px; border-radius: 3px; position: relative; }
+.bar {
+  height: 100%; border-radius: 0 4px 4px 0; min-width: 2px;
+  transition: filter 0.12s;
+}
+.bar-row:hover .bar { filter: brightness(1.08); }
+.bar-value {
+  font-variant-numeric: tabular-nums; color: var(--ink-soft);
+  min-width: 62px; text-align: right;
+}
+.absent { color: var(--ink-muted); font-style: italic; }
+
+.sweep { width: 100%; height: auto; display: block; overflow: visible; }
+.sweep .grid { stroke: var(--rule); stroke-width: 1; }
+.sweep .tick { fill: var(--ink-muted); font-size: 11px; }
+.sweep .axis { fill: var(--ink-soft); font-size: 12px; }
+.sweep .tag { font-size: 12px; font-weight: 600; }
+.sweep .end { text-anchor: end; }
+.sweep .mid { text-anchor: middle; }
+.sweep .dot { stroke: var(--surface); stroke-width: 2; }
+
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+caption { caption-side: bottom; padding-top: 12px; color: var(--ink-muted); font-size: 12.5px; text-align: left; }
+th, td { padding: 7px 10px; border-bottom: 1px solid var(--rule); }
+thead th { text-align: right; font-weight: 600; color: var(--ink-soft); font-size: 12.5px; }
+thead th:first-child, tbody th { text-align: left; }
+tbody th { font-weight: 500; }
+td { text-align: right; font-variant-numeric: tabular-nums; }
+td.best { font-weight: 650; color: var(--ink); }
+td.best::after { content: " ★"; color: var(--ink-muted); font-size: 10px; }
+td.none { color: var(--ink-muted); }
+.scroll { overflow-x: auto; }
+
+footer {
+  margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--rule);
+  font-size: 13px; color: var(--ink-soft);
+}
+footer a { color: inherit; }
+
+#tip {
+  position: fixed; z-index: 10; pointer-events: none; opacity: 0;
+  transition: opacity 0.1s; background: var(--surface); color: var(--ink);
+  border: 1px solid var(--border); border-radius: 7px; padding: 7px 10px;
+  font-size: 12px; line-height: 1.45; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.13);
+  font-variant-numeric: tabular-nums; max-width: 240px;
+}
+#tip b { display: block; font-size: 12.5px; }
+#tip span { color: var(--ink-muted); }
+"""
+
+SCRIPT = """
+const tip = document.getElementById('tip');
+for (const row of document.querySelectorAll('.bar-row[data-tip]')) {
+  row.addEventListener('pointerenter', () => {
+    tip.innerHTML = row.dataset.tip;
+    tip.style.opacity = '1';
+  });
+  row.addEventListener('pointermove', (event) => {
+    const box = tip.getBoundingClientRect();
+    const x = Math.min(event.clientX + 14, window.innerWidth - box.width - 8);
+    const y = Math.max(event.clientY - box.height - 12, 8);
+    tip.style.left = x + 'px';
+    tip.style.top = y + 'px';
+  });
+  row.addEventListener('pointerleave', () => { tip.style.opacity = '0'; });
+}
+"""
+
+COLOR = {
+    "f64": "var(--reference)",
+    "Dec": "var(--dec)",
+    "rust_decimal": "var(--rust-decimal)",
+    "fastnum": "var(--fastnum)",
+}
+
+
+def nanos(value: float) -> str:
+    if value >= 100:
+        return f"{value:,.0f} ns"
+    if value >= 10:
+        return f"{value:.1f} ns"
+    return f"{value:.2f} ns"
+
+
+def render_card(operation: str, caption: str, table: dict) -> str:
+    records = [
+        (name, table[(operation, name)])
+        for name in IMPLEMENTATIONS
+        if (operation, name) in table
+    ]
+    slowest = max(record["nanos"] for _, record in records)
+    best = fastest_decimal(table, operation)
+
+    rows = []
+    for name in IMPLEMENTATIONS:
+        record = table.get((operation, name))
+        if record is None:
+            # f64 has no arm in the conversion groups because converting it to
+            # itself measures nothing; anywhere else the operation is missing
+            missing = "not applicable" if name == "f64" else "not implemented"
+            rows.append(
+                f'<div class="bar-row"><div class="bar-name">{escape(name)}</div>'
+                f'<div class="absent">{missing}</div><div></div></div>'
+            )
+            continue
+        width = max(record["nanos"] / slowest * 100, 1.2)
+        note = " · fastest decimal" if record["nanos"] == best else ""
+        tip = (
+            f"<b>{escape(name)} — {escape(operation)}</b>"
+            f"{nanos(record['nanos'])} per operation{escape(note)}<br>"
+            f"<span>95% CI {nanos(record['low'])} – {nanos(record['high'])}</span>"
+        )
+        rows.append(
+            f'<div class="bar-row" data-tip="{escape(tip, quote=True)}">'
+            f'<div class="bar-name">{escape(name)}</div>'
+            f'<div class="track"><div class="bar" style="width:{width:.1f}%;'
+            f'background:{COLOR[name]}"></div></div>'
+            f'<div class="bar-value">{nanos(record["nanos"])}</div></div>'
+        )
+
+    return (
+        f'<div class="card"><h3>{escape(operation)}</h3>'
+        f'<p class="caption">{escape(caption)}</p>'
+        f'<div class="bars">{"".join(rows)}</div></div>'
+    )
+
+
+# One SVG per sweep. The x axis is linear in the digit count rather than evenly
+# spaced by sample, so the 18-to-19 step reads as the single digit it is.
+def render_sweep(snapshot: dict, operation: str, axis: str) -> str:
+    series = sweep_series(snapshot, operation)
+    points = [value for curve in series.values() for value in curve]
+    widths = sorted({parameter for parameter, _ in points})
+    ceiling = max(nanos for _, nanos in points)
+
+    left, right, top, bottom = 52, 16, 14, 42
+    width, height = 720, 300
+    plot_w, plot_h = width - left - right, height - top - bottom
+
+    def x_of(parameter: int) -> float:
+        span = widths[-1] - widths[0] or 1
+        return left + (parameter - widths[0]) / span * plot_w
+
+    def y_of(nanos: float) -> float:
+        return top + plot_h - (nanos / ceiling) * plot_h
+
+    # round tick values, and never one above the data: a tick past the ceiling
+    # would place its gridline outside the viewBox
+    step = max(10 ** (len(str(int(ceiling))) - 1), 1)
+    if ceiling / step < 3:
+        step = max(step // 2, 1)
+    ticks = list(range(0, int(ceiling) + 1, step))[:8]
+
+    parts = [
+        f'<svg viewBox="0 0 {width} {height}" class="sweep" role="img" '
+        f'aria-label="{escape(operation)} against digit width">'
+    ]
+    for tick in ticks:
+        y = y_of(tick)
+        parts.append(
+            f'<line x1="{left}" y1="{y:.1f}" x2="{width - right}" y2="{y:.1f}" '
+            f'class="grid"/>'
+            f'<text x="{left - 8}" y="{y + 4:.1f}" class="tick end">{tick}</text>'
+        )
+    parts.append(
+        f'<text x="{left - 8}" y="{top - 2}" class="tick end">ns</text>'
+    )
+
+    for parameter in widths:
+        x = x_of(parameter)
+        parts.append(
+            f'<text x="{x:.1f}" y="{height - bottom + 18}" class="tick mid">'
+            f"{parameter}</text>"
+        )
+    parts.append(
+        f'<text x="{left + plot_w / 2:.1f}" y="{height - 6}" class="axis mid">'
+        f"{escape(axis)}</text>"
+    )
+
+    for name in IMPLEMENTATIONS:
+        curve = series.get(name)
+        if not curve:
+            continue
+        path = " ".join(
+            f"{'M' if index == 0 else 'L'}{x_of(p):.1f},{y_of(n):.1f}"
+            for index, (p, n) in enumerate(curve)
+        )
+        parts.append(f'<path d="{path}" fill="none" stroke="{COLOR[name]}" '
+                     f'stroke-width="2" stroke-linejoin="round"/>')
+        for parameter, nanos in curve:
+            parts.append(
+                f'<circle cx="{x_of(parameter):.1f}" cy="{y_of(nanos):.1f}" r="4.5" '
+                f'fill="{COLOR[name]}" class="dot"><title>{escape(name)} at '
+                f"{parameter} digits: {nanos:.2f} ns</title></circle>"
+            )
+        # the series is named at the end of its own line, so identity never
+        # rests on colour alone
+        last_p, last_n = curve[-1]
+        parts.append(
+            f'<text x="{x_of(last_p) - 6:.1f}" y="{y_of(last_n) - 10:.1f}" '
+            f'class="tag end" fill="{COLOR[name]}">{escape(name)}</text>'
+        )
+
+    parts.append("</svg>")
+    return "".join(parts)
+
+
+def render_summary(snapshot: dict) -> str:
+    table = timings(snapshot)
+    head = "".join(f"<th>{escape(name)}</th>" for name in IMPLEMENTATIONS)
+
+    body = []
+    for operation, _ in present(snapshot):
+        best = fastest_decimal(table, operation)
+        cells = []
+        for name in IMPLEMENTATIONS:
+            record = table.get((operation, name))
+            if record is None:
+                cells.append('<td class="none">—</td>')
+            elif record["nanos"] == best:
+                cells.append(f'<td class="best">{record["nanos"]:.2f}</td>')
+            else:
+                cells.append(f"<td>{record['nanos']:.2f}</td>")
+        body.append(f"<tr><th>{escape(operation)}</th>{''.join(cells)}</tr>")
+
+    return (
+        '<div class="scroll"><table>'
+        f"<thead><tr><th>operation</th>{head}</tr></thead>"
+        f"<tbody>{''.join(body)}</tbody>"
+        "<caption>Nanoseconds per operation, median of criterion's samples. "
+        "★ marks the fastest decimal. Lower is better.</caption>"
+        "</table></div>"
+    )
+
+
+def render_html(snapshot: dict) -> str:
+    table = timings(snapshot)
+    info = snapshot["machine"]
+
+    chips = "".join(
+        f'<span class="chip"><b>{escape(label)}</b> {escape(info[key])}</span>'
+        for key, label in (
+            ("cpu", "cpu"),
+            ("arch", "arch"),
+            ("rustc", "rustc"),
+            ("commit", "commit"),
+            ("measured", "measured"),
+        )
+        if info.get(key)
+    )
+
+    legend = "".join(
+        f'<span><i class="swatch" style="background:{COLOR[name]}"></i>{escape(name)}'
+        f"{' — inexact reference' if name == 'f64' else ''}</span>"
+        for name in IMPLEMENTATIONS
+    )
+
+    cards = "".join(
+        render_card(operation, caption, table)
+        for operation, caption in present(snapshot)
+    )
+
+    sweeps = "".join(
+        f"<h2>{escape(heading)}</h2><p>{escape(note)}</p>"
+        f'<div class="card">{render_sweep(snapshot, operation, axis)}</div>'
+        for operation, heading, axis, note in present_sweeps(snapshot)
+    )
+
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>troy benchmarks</title>
+<style>{STYLE}</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>troy benchmarks</h1>
+  <p class="lede">How <code>Dec</code> compares with <code>rust_decimal</code>,
+  <code>fastnum</code> and native <code>f64</code> across the operations a
+  trading system runs on a hot path. Every number is nanoseconds for one
+  operation, taken as the median over {snapshot["count"]:,} values.</p>
+  <div class="provenance">{chips}</div>
+</header>
+
+<h2>Per operation</h2>
+<p>Each chart is scaled to its own slowest bar, so a chart shows who wins that
+operation and by how much — not how operations compare with each other.
+<code>f64</code> is drawn in grey because it is the inexact reference, not a
+decimal competing on correctness.</p>
+<div class="legend">{legend}</div>
+<div class="grid">{cards}</div>
+
+{sweeps}
+
+<h2>Summary</h2>
+<p>The same numbers as one table.</p>
+{render_summary(snapshot)}
+
+<footer>
+Generated by <code>.dev/bench-report</code> from a committed snapshot rather
+than a CI run — shared runners vary by more than the differences measured here.
+Reproduce with <code>make bench-save</code> on your own machine.
+<a href="https://github.com/quantmind/troy">quantmind/troy</a>
+</footer>
+</div>
+<div id="tip" role="status"></div>
+<script>{SCRIPT}</script>
+</body>
+</html>
+"""
+
+
+# --------------------------------------------------------------------------
+
+
+def save(run_first: bool) -> None:
+    if run_first:
+        command = ["cargo", "bench", "--bench", "arithmetic"]
+        print(" ".join(command), file=sys.stderr)
+        if subprocess.run(command, cwd=ROOT).returncode != 0:
+            sys.exit("cargo bench failed")
+
+    if not CRITERION.exists():
+        sys.exit(f"no criterion output at {CRITERION} — run `cargo bench` first")
+
+    results = collect(CRITERION)
+    if not results:
+        sys.exit(f"no benchmarks found under {CRITERION}")
+
+    snapshot = {
+        "machine": machine(),
+        "count": max(record["count"] for record in results),
+        "results": sorted(
+            results, key=lambda r: (r["operation"], r["implementation"])
+        ),
+    }
+    SNAPSHOT.parent.mkdir(parents=True, exist_ok=True)
+    SNAPSHOT.write_text(json.dumps(snapshot, indent=2) + "\n")
+    print(f"wrote {SNAPSHOT.relative_to(ROOT)} ({len(results)} benchmarks)")
+    print(render_table(snapshot))
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    commands = parser.add_subparsers(dest="command", required=True)
+
+    collector = commands.add_parser("save", help="collect into a snapshot")
+    collector.add_argument(
+        "--run", action="store_true", help="run cargo bench before collecting"
+    )
+    commands.add_parser("table", help="print the snapshot as a table")
+    page = commands.add_parser("html", help="render the snapshot as a page")
+    page.add_argument("-o", "--out", type=Path, default=PAGE)
+
+    arguments = parser.parse_args()
+    if arguments.command == "save":
+        save(arguments.run)
+    elif arguments.command == "table":
+        print(render_table(load(SNAPSHOT)))
+    else:
+        arguments.out.parent.mkdir(parents=True, exist_ok=True)
+        arguments.out.write_text(render_html(load(SNAPSHOT)))
+        print(f"wrote {arguments.out}")
+
+
+if __name__ == "__main__":
+    main()

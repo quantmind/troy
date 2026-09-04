@@ -1,6 +1,7 @@
 mod core;
 #[cfg(feature = "rust_decimal")]
 mod decimal;
+mod div;
 mod format;
 mod mul;
 mod ops;

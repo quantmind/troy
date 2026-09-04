@@ -195,6 +195,34 @@ would otherwise reconstruct into the finite range and read as
 The general rule for new operations: **look for an overflow or exactness check
 that a `2^127` magnitude already fails, and let it do the work.**
 
+## Division reaches 187 bits in u128 steps
+
+The raw quotient is `a * 10^18 / b`, a product needing 187 bits that no `u128`
+holds. Rather than carry a 256-bit intermediate, every path divides first and
+scales the remainder afterwards, which keeps each step inside a `u128`:
+
+- **The divisor carries at most 9 decimals**, so `10^9` divides its raw
+  exactly. Cancelling that against the `10^18` leaves `a * 10^9 / b9`, done as
+  a quotient and a scaled remainder — two divisions and no wide arithmetic.
+  Every price, size and tick takes this path.
+- **Finer than that**, `a` is reduced below `b` first, then the remaining
+  `10^18` is applied to the remainder in two `10^9` steps. The remainder is
+  below `b`, so each step has room. This needs `|b|` at or below `3.4e11`.
+- **A divisor above `3.4e11` with more than 9 decimals** has room for neither
+  step, so the scaling walks the 60 bits of `10^18` one at a time, keeping a
+  window below `b`. Doubling that window or adding the remainder to it stays
+  under twice `b`, so the 187-bit product is never formed. It is slow and
+  effectively unreachable from market data, but it keeps the operation exact
+  over the whole range rather than returning NaN for inputs that have an
+  answer.
+
+The three paths overlap on small divisors, where the tests run them against
+each other: a wrong result would have to be produced identically by three
+independent routines.
+
+Dividing by zero yields NaN. There is no infinity in the type, so it is the
+same class of fault as an overflow and collapses to the same state.
+
 ## Prefer a branch to a select
 
 Overflow handling should be written so the compiler emits a predicted branch
@@ -214,4 +242,3 @@ operation, moving `Dec` past `rust_decimal` on that benchmark.
   cannot read back.
 - `checked_*` returns `None` both for an overflowing result and for a NaN
   operand, conflating "too big" with "already invalid".
-- `Dec` has no division yet.
