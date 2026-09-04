@@ -51,9 +51,17 @@ This crates is design to be fast and efficient for high-frequency trading scenar
 It does not aim to be a general-purpose decimal library with extensive features; instead, it focuses on speed and correctness for HFT use cases.
 Some alternative crates for decimal arithmetic include:
 
-* [rust_decimal](https://github.com/paupino/rust-decimal) - a widely used general-purpose decimal library
-* [fastnum](https://github.com/neogenie/fastnum) - for fast decimal arithmetic
-* [fixed](https://gitlab.com/tspiteri/fixed) - a fixed-point arithmetic library for Rust
+- [rust_decimal](https://github.com/paupino/rust-decimal) - a widely used general-purpose decimal library
+- [fastnum](https://github.com/neogenie/fastnum) - for fast decimal arithmetic
+- [fixed](https://gitlab.com/tspiteri/fixed) - a fixed-point arithmetic library for Rust
 
 Some of the design decisions in are based around these crates.
 The bechmarks compare this library with `fastnum` and `rust_decimal` as well as the native `f64`.
+
+
+## Makefile Conventions
+
+- The `help` target must be the first target in the file.
+- All other targets must be sorted alphabetically.
+- Targets should be separated by one blank line only.
+- Each target should have a one-line description, starting with `##`, that describes what the target does. This description is used by the `help` target to generate documentation for all targets.

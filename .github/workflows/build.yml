@@ -33,6 +33,11 @@ jobs:
       - name: Test
         run: make rs-test
 
+      - name: Reference check
+        # the unoptimised run in `make rs-test` takes a slice of the sweep; a
+        # release build is ninety times faster and takes the lot
+        run: make rs-oracle
+
       - name: Benchmarks
         # --test runs each benchmark once instead of measuring it: enough to
         # catch a bench that stopped compiling, fast enough for every PR

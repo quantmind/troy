@@ -5,6 +5,7 @@ edition = "2024"
 rust-version = "1.87"
 description = "Superfast primitives and data structures for high frequency trading"
 repository = "https://github.com/quantmind/troy"
+documentation = "https://docs.rs/troy"
 license = "MIT"
 readme = "readme.md"
 keywords = ["hft", "trading", "orderbook", "decimal", "low-latency"]
