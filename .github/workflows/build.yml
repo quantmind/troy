@@ -38,10 +38,18 @@ jobs:
         # release build is ninety times faster and takes the lot
         run: make rs-oracle
 
+      - name: Property sweep
+        # `make rs-test` runs the properties at proptest's default 256 cases,
+        # unoptimised; release makes a sweep hundreds of times wider affordable
+        # on every PR, which is where a rare input actually turns up
+        run: make rs-fuzz
+
       - name: Benchmarks
         # --test runs each benchmark once instead of measuring it: enough to
         # catch a bench that stopped compiling, fast enough for every PR
-        run: cargo bench --bench arithmetic -- --test
+        run: |
+          cargo bench --bench arithmetic -- --test
+          cargo bench --bench orderbook -- --test
 
       - name: Docs
         # warnings are errors here, so a broken intra-doc link fails the build

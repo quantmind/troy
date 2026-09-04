@@ -55,8 +55,8 @@ assert_eq!(book.spread(), Some(dec!(0.05)));
 
 A level enters only if `PriceAmount::is_valid` accepts it. A non-finite price
 would sort against every other level rather than among them, and a non-finite
-amount would poison the side's running total for good, since the subtraction
-that removes the level cannot take a NaN back out again.
+amount would carry into every statistic taken over the side for as long as the
+level stood.
 
 ## Benchmarks
 

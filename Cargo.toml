@@ -1,6 +1,6 @@
 [package]
 name = "troy"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 rust-version = "1.87"
 description = "Superfast primitives and data structures for high frequency trading"
@@ -44,6 +44,7 @@ rand_distr = "0.6.0"
 fastnum = "0.7.5"
 rust_decimal = "1.43"
 serde_json = "1.0"
+proptest = "1.11.0"
 
 [features]
 default = []
@@ -53,4 +54,8 @@ serde = ["dep:serde"]
 
 [[bench]]
 name = "arithmetic"
+harness = false
+
+[[bench]]
+name = "orderbook"
 harness = false
