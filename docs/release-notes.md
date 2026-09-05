@@ -25,16 +25,14 @@ Added
 - `Display` honours the format spec. A precision rounds to exactly that many
   places, halves away from zero, padded with zeros past `Dec::SCALE`; width,
   fill, alignment, `0` and `+` behave as they do on the built-in numeric types.
-  Bare `{}` is unchanged, and still compiles to what it did before.
+  Bare `{}` is unchanged, and still compiles to what it did before. The
+  rounding runs on the digits rather than through a `Dec`, so a carry out of
+  the range still renders: `format!("{:.0}", Dec::MAX)` is
+  `170141183460469231732`, a number `Dec` cannot hold and `round_dp` answers
+  with `Dec::NAN`.
 - A benchmark and docs site at <https://troy.quantmind.com>, carrying the full
   benchmark set, the order book numbers, the digit and depth sweeps and the
   design docs. `make site` builds it, `make site-dev` serves it locally.
-
-Changed
-
-- `{:.N}` spells out a value whose carry leaves the finite range rather than
-  giving up on it: `format!("{:.0}", Dec::MAX)` renders
-  `170141183460469231732`, where `Dec::MAX.round_dp(0)` is `Dec::NAN`.
 
 Removed
 
