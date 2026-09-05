@@ -85,16 +85,18 @@ impl OrderBookSide {
         self.max_depth
     }
 
-    /// Whether the levels are held best first: descending for bids, ascending
-    /// for asks, and no price twice.
+    /// Whether the side holds what [`OrderBookSide::set`] would have left: every
+    /// level valid, and the levels best first — descending for bids, ascending
+    /// for asks, with no price twice.
     ///
-    /// Nothing here checks this on the way past, because it is what
-    /// [`OrderBookSide::set`] maintains and what every read assumes.
-    fn is_ordered(&self) -> bool {
-        self.levels.windows(2).all(|pair| match self.desc {
-            true => pair[0].price > pair[1].price,
-            false => pair[0].price < pair[1].price,
-        })
+    /// Nothing here checks this on the way past, because it is what `set`
+    /// maintains and what every read assumes.
+    fn is_consistent(&self) -> bool {
+        self.levels.iter().all(|level| level.is_valid())
+            && self.levels.windows(2).all(|pair| match self.desc {
+                true => pair[0].price > pair[1].price,
+                false => pair[0].price < pair[1].price,
+            })
     }
 
     /// Iterate every level, best first.
@@ -351,15 +353,17 @@ impl OrderBook {
         }
     }
 
-    /// Whether the book holds together: each side ordered the way its slot
-    /// requires, and a spread above zero.
+    /// Whether the book holds together: every level valid, each side ordered
+    /// the way its slot requires, and a spread above zero.
     ///
     /// A book built through [`OrderBookSide::set`] is consistent by
     /// construction, so this is for one that arrived another way — deserialised
     /// from a snapshot, or assembled by hand — and for asserting the invariant
     /// in a test. Reads here are index arithmetic and binary searches over
     /// levels held best first, so a side out of order answers wrongly rather
-    /// than failing, and this is what catches that.
+    /// than failing, and a level [`PriceAmount::is_valid`] would have turned
+    /// away carries into every statistic taken over the side for as long as it
+    /// stands. This catches both.
     ///
     /// An empty side is ordered and a book missing a side has no spread to
     /// judge, so both are consistent. A crossed book is not, and neither is a
@@ -369,8 +373,8 @@ impl OrderBook {
     pub fn is_consistent(&self) -> bool {
         self.bids.desc
             && !self.asks.desc
-            && self.bids.is_ordered()
-            && self.asks.is_ordered()
+            && self.bids.is_consistent()
+            && self.asks.is_consistent()
             && self.spread().is_none_or(Dec::is_sign_positive)
     }
 
@@ -1205,5 +1209,35 @@ mod tests {
             amount: dec!(2),
         });
         assert!(!book.is_consistent(), "the same price twice");
+    }
+
+    #[test]
+    fn test_a_level_set_would_have_turned_away_is_not_consistent() {
+        let mut book = OrderBook::new(None);
+        book.bids.set_price_amount(dec!(100), dec!(1));
+        book.asks.set_price_amount(dec!(101), dec!(1));
+        assert!(book.is_consistent());
+
+        // `set` rejects these outright, so they can only arrive on a side
+        // assembled some other way — a snapshot read back, or a test
+        for level in [
+            PriceAmount {
+                price: dec!(99),
+                amount: dec!(-1),
+            },
+            PriceAmount {
+                price: dec!(98),
+                amount: Dec::NAN,
+            },
+            PriceAmount {
+                price: Dec::NAN,
+                amount: dec!(1),
+            },
+        ] {
+            let mut book = book.clone();
+            assert_eq!(book.bids.set(level), None, "set takes {level:?}");
+            book.bids.levels.push(level);
+            assert!(!book.is_consistent(), "{level:?} is held");
+        }
     }
 }
