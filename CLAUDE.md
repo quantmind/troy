@@ -57,6 +57,11 @@ So a release is four steps, in this order:
    sweep and the property sweep in release, which the release workflow does not.
 4. `make release` — tags `v<version>` from `Cargo.toml` and pushes the tag.
 
+Never commit during a release. Do steps 1 and 2, then stop and show the release
+notes for approval: they are published verbatim as the GitHub Release body and
+cannot be revised for a version once it is out.
+Committing is step 3, and it is always the human to run.
+
 ### Release notes
 
 `docs/release-notes.md` is the source of truth, one `## v<version>` section per
