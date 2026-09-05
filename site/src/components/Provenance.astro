@@ -1,0 +1,29 @@
+---
+import type { Machine } from "@/lib/bench";
+
+interface Props {
+  machine: Machine;
+}
+
+const { machine } = Astro.props;
+
+const fields: [keyof Machine, string][] = [
+  ["cpu", "cpu"],
+  ["arch", "arch"],
+  ["rustc", "rustc"],
+  ["commit", "commit"],
+  ["measured", "measured"],
+];
+---
+
+<div class="provenance">
+  {
+    fields
+      .filter(([key]) => machine[key])
+      .map(([key, label]) => (
+        <span class="chip">
+          <b>{label}</b> {machine[key]}
+        </span>
+      ))
+  }
+</div>

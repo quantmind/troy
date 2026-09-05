@@ -9,10 +9,6 @@ bench:			## run the criterion benchmarks
 	@cargo bench --bench arithmetic
 	@cargo bench --bench orderbook
 
-.PHONY: bench-page
-bench-page:		## build the benchmark page into site/index.html
-	@.dev/bench-report html
-
 .PHONY: bench-report
 bench-report:		## open criterion's own report: violin, PDF and per-parameter charts
 	@python3 -c "import webbrowser; webbrowser.open('file://$(PWD)/target/criterion/report/index.html')"
@@ -63,3 +59,13 @@ rs-publish:		## publish the crate to crates.io
 .PHONY: rs-test
 rs-test:		## Run rust tests with all features
 	@cargo test --all-features
+
+.PHONY: site
+site:			## build the benchmark and docs site into site/dist
+	@[ -d site/node_modules ] || npm --prefix site install
+	@npm --prefix site run build
+
+.PHONY: site-dev
+site-dev:		## serve the site locally with hot reload
+	@[ -d site/node_modules ] || npm --prefix site install
+	@npm --prefix site run dev

@@ -1,0 +1,133 @@
+---
+import { href, LINKS, NAV } from "@/lib/nav";
+import "@/styles/global.css";
+
+interface Props {
+  title: string;
+  description: string;
+}
+
+const { title, description } = Astro.props;
+const full = `${title} — troy`;
+const canonical = new URL(Astro.url.pathname, Astro.site);
+
+const strip = (path: string) => path.replace(/\/+$/, "") || "/";
+const here = strip(Astro.url.pathname);
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{full}</title>
+    <meta name="description" content={description} />
+    <meta property="og:title" content={full} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content={canonical} />
+    <link rel="canonical" href={canonical} />
+    {/* before first paint, so an explicit choice does not flash the other theme */}
+    <script is:inline>
+      try {
+        const saved = localStorage.getItem("troy.theme");
+        if (saved) document.documentElement.dataset.theme = saved;
+      } catch {}
+    </script>
+  </head>
+  <body>
+    <div class="wrap">
+      <nav class="top">
+        <a class="mark" href={href("")}>troy</a>
+        {
+          NAV.map((item) => (
+            <a
+              href={href(item.path)}
+              aria-current={strip(href(item.path)) === here ? "page" : undefined}
+            >
+              {item.label}
+            </a>
+          ))
+        }
+        <span class="spacer"></span>
+        <span class="divider"></span>
+        {
+          LINKS.map((link) => (
+            <a href={link.href} rel="noopener">
+              {link.label}
+            </a>
+          ))
+        }
+        <button
+          class="theme-toggle"
+          type="button"
+          aria-label="Switch between light and dark"
+        >
+          <span aria-hidden="true">◐</span>
+        </button>
+      </nav>
+
+      <slot />
+
+      <footer>
+        Generated from a committed snapshot rather than a CI run: shared runners
+        vary by more than the differences measured here. Reproduce with
+        <code>make bench-save</code> on your own machine.
+        <p class="links">
+          {
+            LINKS.map((link, index) => (
+              <>
+                {index > 0 ? " · " : ""}
+                <a href={link.href} rel="noopener">
+                  {link.label}
+                </a>
+              </>
+            ))
+          }
+        </p>
+      </footer>
+    </div>
+
+    <div id="tip" role="status"></div>
+
+    <script>
+      // The toggle flips away from whatever is on screen now, so the first
+      // press always visibly changes something whichever way the OS leans.
+      const root = document.documentElement;
+      const toggle = document.querySelector(".theme-toggle");
+      toggle?.addEventListener("click", () => {
+        const dark =
+          root.dataset.theme === "dark" ||
+          (!root.dataset.theme &&
+            matchMedia("(prefers-color-scheme: dark)").matches);
+        const next = dark ? "light" : "dark";
+        root.dataset.theme = next;
+        try {
+          localStorage.setItem("troy.theme", next);
+        } catch {}
+      });
+
+      // Bar tooltips. Cheap enough to attach unconditionally: a page with no
+      // bars matches nothing.
+      const tip = document.getElementById("tip");
+      if (tip) {
+        for (const row of document.querySelectorAll<HTMLElement>(
+          ".bar-row[data-tip]",
+        )) {
+          row.addEventListener("pointerenter", () => {
+            tip.innerHTML = row.dataset.tip ?? "";
+            tip.style.opacity = "1";
+          });
+          row.addEventListener("pointermove", (event) => {
+            const box = tip.getBoundingClientRect();
+            tip.style.left = `${Math.min(event.clientX + 14, innerWidth - box.width - 8)}px`;
+            tip.style.top = `${Math.max(event.clientY - box.height - 12, 8)}px`;
+          });
+          row.addEventListener("pointerleave", () => {
+            tip.style.opacity = "0";
+          });
+        }
+      }
+    </script>
+  </body>
+</html>

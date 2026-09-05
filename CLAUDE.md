@@ -74,19 +74,51 @@ page is rendered from it, not from CI.
 ```bash
 make bench             # run the criterion benchmarks
 make bench-save        # run them and record docs/bench-data.json
-make bench-page        # render that snapshot into site/index.html
+make bench-table       # print that snapshot as a terminal table
 make bench-report      # open criterion's own report (violin, PDF, sweeps)
 ```
 
 criterion's report lives in `target/criterion` and is ~30 MB of SVG, so it
-stays a local tool. The published page carries the curated summary and the
-digit sweeps, both rendered from the snapshot.
+stays a local tool. The published site carries the curated summary, the digit
+sweeps and the depth sweeps, all rendered from the snapshot.
 
 `docs/bench-data.json` is a committed snapshot measured on a known machine,
 carrying the CPU, rustc version and commit it came from. `.dev/bench-report`
-reads criterion's JSON and renders both the terminal table and the page that
-`.github/workflows/pages.yml` publishes to GitHub Pages. CI never measures:
-a shared runner varies by more than the differences the page reports.
+reads criterion's JSON and writes that snapshot, and prints the terminal table
+from it. CI never measures: a shared runner varies by more than the differences
+the page reports.
+
+## Site
+
+`site/` is an Astro project, published by `.github/workflows/pages.yml` to
+<https://troy.quantmind.com>, from the root. The custom domain is configured in
+the repository's Pages settings, not in a committed CNAME, so `site` in
+`site/astro.config.mjs` is the only place it is written down. The project reads
+`docs/bench-data.json` and `docs/*.md` directly, so the crate keeps one copy of
+each.
+
+```bash
+make site              # build into site/dist
+make site-dev          # serve locally with hot reload
+```
+
+Components are React rendered at build time. Nothing carries a `client:`
+directive, so no React reaches the browser: the only script on a page is the
+theme toggle and the bar tooltip.
+
+- `site/src/lib/bench.ts` is the data layer. It types the snapshot and holds
+  the presentation metadata: which operations appear, in what order, with what
+  caption. Adding a benchmark group to a page means adding a line there.
+- `site/src/components/` holds the charts. `Sweep` draws a curve against a
+  parameter on a linear or log axis, `BarCard` one operation across the
+  implementations, `SummaryTable` and `DepthTable` the same numbers as tables.
+- `site/src/pages/` holds one file per page, and `site/src/lib/nav.ts` the top
+  nav. A new page is a file in each.
+- `docs/*.md` is published through `site/src/content.config.ts`. Those files
+  are also included into the crate docs with `include_str!`, so they are
+  written for rustdoc; `site/src/lib/rustdoc.mjs` strips the leading heading
+  and rewrites `crate::` intra-doc links on the way to the web. To publish a
+  new one, add it to the loader's pattern and to `DOCS` in `nav.ts`.
 
 ## Alternatives Crates
 

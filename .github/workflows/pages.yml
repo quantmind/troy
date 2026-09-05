@@ -1,6 +1,6 @@
 name: pages
 
-# Publishes the benchmark page to GitHub Pages from the committed snapshot in
+# Publishes the benchmark and docs site from the committed snapshot in
 # docs/bench-data.json. The numbers are measured on a known machine and
 # committed deliberately — a shared CI runner varies by more than the
 # differences being measured, so nothing here runs `cargo bench`.
@@ -9,8 +9,8 @@ on:
   push:
     branches: [main]
     paths:
-      - docs/bench-data.json
-      - .dev/bench-report
+      - docs/**
+      - site/**
       - .github/workflows/pages.yml
   workflow_dispatch:
 
@@ -34,14 +34,23 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Build the benchmark page
-        run: .dev/bench-report html --out site/index.html
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Install
+        run: npm --prefix site ci
+
+      - name: Build the site
+        run: npm --prefix site run build
 
       - uses: actions/configure-pages@v5
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: site
+          path: site/dist
 
       - id: deployment
         uses: actions/deploy-pages@v4

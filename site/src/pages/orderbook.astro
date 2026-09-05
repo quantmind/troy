@@ -1,0 +1,79 @@
+---
+import DepthTable from "@/components/DepthTable";
+import Provenance from "@/components/Provenance.astro";
+import Sweep from "@/components/Sweep";
+import { bookDepths, presentBook, snapshot, sweepSeries } from "@/lib/bench";
+import Base from "@/layouts/Base.astro";
+
+const operations = presentBook(snapshot);
+const depths = bookDepths(snapshot);
+const shallowest = depths[0];
+const deepest = depths[depths.length - 1];
+const description =
+  "What OrderBook costs against the depth of the book: which operations stay " +
+  "flat, and which pay for the levels they move.";
+---
+
+<Base title="Order book benchmarks" description={description}>
+  <header>
+    <h1>Order book benchmarks</h1>
+    <p class="lede">
+      <code>OrderBook</code> keeps each side in a vector sorted best first, so a
+      read is an index or a binary search and a write moves the levels below it.
+      These charts are that trade: what each operation costs against the depth
+      of one side{
+        depths.length
+          ? `, from a top-of-book feed at ${shallowest} levels out to ${deepest}, further than an exchange publishes and far enough for the memmove to separate from the search.`
+          : "."
+      }
+    </p>
+    <Provenance machine={snapshot.machine} />
+  </header>
+
+  {
+    operations.length === 0 ? (
+      <>
+        <h2>Not in this snapshot</h2>
+        <p>
+          <code>docs/bench-data.json</code> was measured before the order book
+          benchmarks existed, so there is nothing to draw here yet. Run
+          <code>make bench-save</code> on the reference machine and commit the
+          snapshot: <code>benches/orderbook.rs</code> is already collected, and
+          this page fills itself in.
+        </p>
+      </>
+    ) : (
+      <>
+        <h2>Against depth</h2>
+        <p>
+          One chart per operation, each scaled to its own slowest point, with
+          depth on a log axis because it quadruples between samples. A flat line
+          is an operation that does not care how deep the book is. Accesses are
+          scattered rather than sequential, so the cache miss a real feed
+          produces is in the number.
+        </p>
+        <div class="cards wide">
+          {operations.map(({ operation, caption }) => (
+            <div class="card">
+              <h3>{operation.replace(/^book_/, "")}</h3>
+              <p class="caption">{caption}</p>
+              <Sweep
+                series={sweepSeries(operation, snapshot)}
+                scale="log"
+                tags={false}
+                axis="Levels on one side"
+                label={`${operation} against book depth`}
+                width={360}
+                height={210}
+              />
+            </div>
+          ))}
+        </div>
+
+        <h2>Summary</h2>
+        <p>The same numbers as one table, with the ends of each sweep divided.</p>
+        <DepthTable snapshot={snapshot} />
+      </>
+    )
+  }
+</Base>

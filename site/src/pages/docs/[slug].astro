@@ -1,0 +1,22 @@
+---
+import { getCollection, render } from "astro:content";
+import { DOCS } from "@/lib/nav";
+import Base from "@/layouts/Base.astro";
+
+export async function getStaticPaths() {
+  const entries = await getCollection("docs");
+  return entries.map((entry) => ({ params: { slug: entry.id }, props: { entry } }));
+}
+
+const { entry } = Astro.props;
+const { Content } = await render(entry);
+const meta = DOCS[entry.id] ?? { title: entry.id, lede: "" };
+---
+
+<Base title={meta.title} description={meta.lede}>
+  <header>
+    <h1>{meta.title}</h1>
+    <p class="lede">{meta.lede}</p>
+  </header>
+  <article class="prose"><Content /></article>
+</Base>
