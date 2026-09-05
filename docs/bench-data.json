@@ -1,11 +1,11 @@
 {
   "machine": {
-    "cpu": "Intel(R) Core(TM) Ultra 9 285H",
+    "cpu": "12th Gen Intel(R) Core(TM) i7-12700H",
     "arch": "x86_64",
-    "os": "Linux-6.6.114.1-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+    "os": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
     "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
-    "commit": "2265b09",
-    "measured": "2026-09-04 10:59 UTC"
+    "commit": "64d3372 (modified)",
+    "measured": "2026-09-05 12:58 UTC"
   },
   "count": 1024,
   "results": [
@@ -14,990 +14,1350 @@
       "implementation": "Dec",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 0.8518786587300062,
-      "low": 0.840514731730896,
-      "high": 0.8792955495364407
+      "nanos": 1.1216596498291236,
+      "low": 1.1193349089696507,
+      "high": 1.1237179129464285
     },
     {
       "operation": "add",
       "implementation": "f64",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 0.3868603939791294,
-      "low": 0.3852477826362428,
-      "high": 0.3929557225043431
+      "nanos": 0.7148318929581099,
+      "low": 0.6784136328236895,
+      "high": 0.7504027016537422
     },
     {
       "operation": "add",
       "implementation": "fastnum",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 8.008228170460669,
-      "low": 7.945243547311166,
-      "high": 8.071287007071266
+      "nanos": 8.858965238572209,
+      "low": 8.848169285446499,
+      "high": 8.867203893618852
     },
     {
       "operation": "add",
       "implementation": "rust_decimal",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 1.7640982840597013,
-      "low": 1.7535360059249712,
-      "high": 1.8027655682291321
+      "nanos": 2.5841669268775167,
+      "low": 2.564431904112113,
+      "high": 2.6215095622525793
+    },
+    {
+      "operation": "book_apply_diff",
+      "implementation": "Dec",
+      "parameter": "128",
+      "count": 16,
+      "nanos": 9.604679483282622,
+      "low": 9.585404782975397,
+      "high": 9.666134040986707
+    },
+    {
+      "operation": "book_apply_diff",
+      "implementation": "Dec",
+      "parameter": "32",
+      "count": 16,
+      "nanos": 8.567065393113953,
+      "low": 8.531471977054828,
+      "high": 8.700067756585558
+    },
+    {
+      "operation": "book_apply_diff",
+      "implementation": "Dec",
+      "parameter": "512",
+      "count": 16,
+      "nanos": 10.678715914266807,
+      "low": 10.648945810941333,
+      "high": 10.730187311911052
+    },
+    {
+      "operation": "book_apply_diff",
+      "implementation": "Dec",
+      "parameter": "8",
+      "count": 16,
+      "nanos": 10.28434091046265,
+      "low": 7.738027833331518,
+      "high": 10.464997139681994
+    },
+    {
+      "operation": "book_best",
+      "implementation": "Dec",
+      "parameter": "128",
+      "count": 256,
+      "nanos": 3.5795309259288506,
+      "low": 3.5002475628040015,
+      "high": 3.901597314713048
+    },
+    {
+      "operation": "book_best",
+      "implementation": "Dec",
+      "parameter": "32",
+      "count": 256,
+      "nanos": 2.1748803799122345,
+      "low": 2.140918980475259,
+      "high": 2.249328591852158
+    },
+    {
+      "operation": "book_best",
+      "implementation": "Dec",
+      "parameter": "512",
+      "count": 256,
+      "nanos": 3.391755337863435,
+      "low": 3.3793390313255744,
+      "high": 3.4738247300578147
+    },
+    {
+      "operation": "book_best",
+      "implementation": "Dec",
+      "parameter": "8",
+      "count": 256,
+      "nanos": 2.3292797564983845,
+      "low": 2.2812813837701817,
+      "high": 2.4428284569668985
+    },
+    {
+      "operation": "book_churn",
+      "implementation": "Dec",
+      "parameter": "128",
+      "count": 256,
+      "nanos": 59.98666297399951,
+      "low": 59.898151405603,
+      "high": 60.41761138473732
+    },
+    {
+      "operation": "book_churn",
+      "implementation": "Dec",
+      "parameter": "32",
+      "count": 256,
+      "nanos": 28.789076816099477,
+      "low": 28.742681615191636,
+      "high": 28.879923999690952
+    },
+    {
+      "operation": "book_churn",
+      "implementation": "Dec",
+      "parameter": "512",
+      "count": 256,
+      "nanos": 298.08521634615386,
+      "low": 293.1664888180062,
+      "high": 325.2040214342949
+    },
+    {
+      "operation": "book_churn",
+      "implementation": "Dec",
+      "parameter": "8",
+      "count": 256,
+      "nanos": 17.320086748172073,
+      "low": 17.239764404296874,
+      "high": 17.391058422270277
+    },
+    {
+      "operation": "book_find",
+      "implementation": "Dec",
+      "parameter": "128",
+      "count": 256,
+      "nanos": 8.822391213380234,
+      "low": 8.791714121357334,
+      "high": 9.048106594327432
+    },
+    {
+      "operation": "book_find",
+      "implementation": "Dec",
+      "parameter": "32",
+      "count": 256,
+      "nanos": 7.734919401508363,
+      "low": 7.7040452788978495,
+      "high": 7.794012379292274
+    },
+    {
+      "operation": "book_find",
+      "implementation": "Dec",
+      "parameter": "512",
+      "count": 256,
+      "nanos": 19.51407801840891,
+      "low": 17.393192347456306,
+      "high": 23.376181384597377
+    },
+    {
+      "operation": "book_find",
+      "implementation": "Dec",
+      "parameter": "8",
+      "count": 256,
+      "nanos": 8.751000226016075,
+      "low": 8.659454713192286,
+      "high": 8.991952946048755
+    },
+    {
+      "operation": "book_insert",
+      "implementation": "Dec",
+      "parameter": "128",
+      "count": 8,
+      "nanos": 67.62922986637776,
+      "low": 36.854330985915496,
+      "high": 71.85981514084506
+    },
+    {
+      "operation": "book_insert",
+      "implementation": "Dec",
+      "parameter": "32",
+      "count": 8,
+      "nanos": 25.49581503361965,
+      "low": 22.837230119709275,
+      "high": 30.53778201817994
+    },
+    {
+      "operation": "book_insert",
+      "implementation": "Dec",
+      "parameter": "512",
+      "count": 8,
+      "nanos": 131.24062570145904,
+      "low": 116.59455026455026,
+      "high": 152.17318945868945
+    },
+    {
+      "operation": "book_insert",
+      "implementation": "Dec",
+      "parameter": "8",
+      "count": 8,
+      "nanos": 18.18870643810817,
+      "low": 17.615392652154362,
+      "high": 19.679864204995475
+    },
+    {
+      "operation": "book_nth",
+      "implementation": "Dec",
+      "parameter": "128",
+      "count": 256,
+      "nanos": 2.2329258721219727,
+      "low": 2.210315891014906,
+      "high": 2.289309813089313
+    },
+    {
+      "operation": "book_nth",
+      "implementation": "Dec",
+      "parameter": "32",
+      "count": 256,
+      "nanos": 1.4716804346843988,
+      "low": 1.4650762575205571,
+      "high": 1.4762489850225466
+    },
+    {
+      "operation": "book_nth",
+      "implementation": "Dec",
+      "parameter": "512",
+      "count": 256,
+      "nanos": 2.238630154231343,
+      "low": 2.2096179425093023,
+      "high": 2.316179092501341
+    },
+    {
+      "operation": "book_nth",
+      "implementation": "Dec",
+      "parameter": "8",
+      "count": 256,
+      "nanos": 1.483506684183705,
+      "low": 1.4767368086140622,
+      "high": 1.9879672035696676
+    },
+    {
+      "operation": "book_remove",
+      "implementation": "Dec",
+      "parameter": "128",
+      "count": 8,
+      "nanos": 74.46857581967214,
+      "low": 56.055917008196715,
+      "high": 80.87022443403592
+    },
+    {
+      "operation": "book_remove",
+      "implementation": "Dec",
+      "parameter": "32",
+      "count": 8,
+      "nanos": 30.212954350314824,
+      "low": 27.70381930247772,
+      "high": 37.47331107153079
+    },
+    {
+      "operation": "book_remove",
+      "implementation": "Dec",
+      "parameter": "512",
+      "count": 8,
+      "nanos": 217.19040487658037,
+      "low": 198.84665474219491,
+      "high": 229.74829632805108
+    },
+    {
+      "operation": "book_remove",
+      "implementation": "Dec",
+      "parameter": "8",
+      "count": 8,
+      "nanos": 14.314813097593142,
+      "low": 10.361559848248216,
+      "high": 14.658367334322453
+    },
+    {
+      "operation": "book_stats",
+      "implementation": "Dec",
+      "parameter": "128",
+      "count": 1,
+      "nanos": 837.8013213690747,
+      "low": 818.0769293178425,
+      "high": 868.7669829460635
+    },
+    {
+      "operation": "book_stats",
+      "implementation": "Dec",
+      "parameter": "32",
+      "count": 1,
+      "nanos": 227.24281655844158,
+      "low": 219.81976671476673,
+      "high": 236.50257568637502
+    },
+    {
+      "operation": "book_stats",
+      "implementation": "Dec",
+      "parameter": "512",
+      "count": 1,
+      "nanos": 3460.5182609233243,
+      "low": 3306.5646741678383,
+      "high": 4473.524613220816
+    },
+    {
+      "operation": "book_stats",
+      "implementation": "Dec",
+      "parameter": "8",
+      "count": 1,
+      "nanos": 43.49912369852846,
+      "low": 43.406166466211104,
+      "high": 43.65248514395937
+    },
+    {
+      "operation": "book_top",
+      "implementation": "Dec",
+      "parameter": "128",
+      "count": 256,
+      "nanos": 5.986681542122241,
+      "low": 5.909356505997234,
+      "high": 6.145369156844805
+    },
+    {
+      "operation": "book_top",
+      "implementation": "Dec",
+      "parameter": "32",
+      "count": 256,
+      "nanos": 3.9080367400866596,
+      "low": 3.8984715993330923,
+      "high": 3.9663054342830883
+    },
+    {
+      "operation": "book_top",
+      "implementation": "Dec",
+      "parameter": "512",
+      "count": 256,
+      "nanos": 6.3135187349566095,
+      "low": 6.05065732909882,
+      "high": 7.321516451870439
+    },
+    {
+      "operation": "book_top",
+      "implementation": "Dec",
+      "parameter": "8",
+      "count": 256,
+      "nanos": 3.902046971414312,
+      "low": 3.8992026974521896,
+      "high": 3.90899126998864
+    },
+    {
+      "operation": "book_update",
+      "implementation": "Dec",
+      "parameter": "128",
+      "count": 256,
+      "nanos": 10.635638901172694,
+      "low": 10.55567990860849,
+      "high": 10.753045032429245
+    },
+    {
+      "operation": "book_update",
+      "implementation": "Dec",
+      "parameter": "32",
+      "count": 256,
+      "nanos": 9.004683220852895,
+      "low": 8.858253141005122,
+      "high": 9.157395175674775
+    },
+    {
+      "operation": "book_update",
+      "implementation": "Dec",
+      "parameter": "512",
+      "count": 256,
+      "nanos": 18.730213592553888,
+      "low": 18.422804741010275,
+      "high": 19.32871457579325
+    },
+    {
+      "operation": "book_update",
+      "implementation": "Dec",
+      "parameter": "8",
+      "count": 256,
+      "nanos": 7.145292332770994,
+      "low": 7.1163149814338755,
+      "high": 7.165615926540121
     },
     {
       "operation": "ceil",
       "implementation": "Dec",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 3.981559871281461,
-      "low": 3.956490140972716,
-      "high": 4.02335662071151
+      "nanos": 5.2541843581233305,
+      "low": 5.245925876037676,
+      "high": 5.2598051792556095
     },
     {
       "operation": "ceil",
       "implementation": "f64",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 1.0092326231965023,
-      "low": 0.9990837256246761,
-      "high": 1.0442286686326396
+      "nanos": 1.806199724743771,
+      "low": 1.8044877854788108,
+      "high": 1.8085673489218328
     },
     {
       "operation": "ceil",
       "implementation": "fastnum",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 14.425972529820033,
-      "low": 14.360653008355035,
-      "high": 14.714379441504384
+      "nanos": 20.148685619212962,
+      "low": 20.09034541377315,
+      "high": 20.34571126302083
     },
     {
       "operation": "ceil",
       "implementation": "rust_decimal",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 7.680109322875785,
-      "low": 7.608499380258413,
-      "high": 7.765856285234948
+      "nanos": 9.210264472650351,
+      "low": 9.204690632087754,
+      "high": 9.216912862074336
     },
     {
       "operation": "clone",
       "implementation": "Dec",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 0.09214590442442576,
-      "low": 0.09097942272024295,
-      "high": 0.09483917015398251
+      "nanos": 0.2362764161624369,
+      "low": 0.23424188428955298,
+      "high": 0.23954299166003706
     },
     {
       "operation": "clone",
       "implementation": "f64",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 0.06027955879952264,
-      "low": 0.05978447038464811,
-      "high": 0.061391581866325484
+      "nanos": 0.09533381672769892,
+      "low": 0.0952542363815629,
+      "high": 0.09541875131924243
     },
     {
       "operation": "clone",
       "implementation": "fastnum",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 0.5113367600369971,
-      "low": 0.5089900085673619,
-      "high": 0.5224996292612432
+      "nanos": 0.46435551253811314,
+      "low": 0.45493308476849564,
+      "high": 0.4863740289548023
     },
     {
       "operation": "clone",
       "implementation": "rust_decimal",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 0.11152803698531016,
-      "low": 0.11029580299929023,
-      "high": 0.11380459164525686
+      "nanos": 0.15566156476894177,
+      "low": 0.15485903057015507,
+      "high": 0.1666002011244559
     },
     {
       "operation": "cmp",
       "implementation": "Dec",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 0.3112434046882375,
-      "low": 0.3088311940921618,
-      "high": 0.3188270374976644
+      "nanos": 0.5276842084054751,
+      "low": 0.5273850978484891,
+      "high": 0.5282400249666488
     },
     {
       "operation": "cmp",
       "implementation": "f64",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 0.10438146671926245,
-      "low": 0.1042593253081967,
-      "high": 0.10510254157486429
+      "nanos": 0.12010937923950926,
+      "low": 0.1200238177208825,
+      "high": 0.12030073524217638
     },
     {
       "operation": "cmp",
       "implementation": "fastnum",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 4.290566027737404,
-      "low": 4.251592144145287,
-      "high": 4.432987457985102
+      "nanos": 5.459736755568985,
+      "low": 5.454050725043647,
+      "high": 5.467065338909053
     },
     {
       "operation": "cmp",
       "implementation": "rust_decimal",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 3.339782758912455,
-      "low": 3.3213409796313607,
-      "high": 3.4524180886661853
+      "nanos": 7.230836951095476,
+      "low": 7.145618557055926,
+      "high": 7.509706076994766
     },
     {
       "operation": "collect",
       "implementation": "Dec",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 7.914125776560294,
-      "low": 7.868998531478049,
-      "high": 7.982885098502236
+      "nanos": 11.663208291003702,
+      "low": 11.574616000183628,
+      "high": 11.754658495259081
     },
     {
       "operation": "collect",
       "implementation": "f64",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 7.183336253375446,
-      "low": 7.112013211069159,
-      "high": 7.2634656689686246
+      "nanos": 11.068411677062748,
+      "low": 11.029444839015152,
+      "high": 11.09952059659091
     },
     {
       "operation": "collect",
       "implementation": "fastnum",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 9.544826276640325,
-      "low": 9.432172823500359,
-      "high": 9.608031945941093
+      "nanos": 12.768935903758306,
+      "low": 12.749504079677589,
+      "high": 12.895630677688953
     },
     {
       "operation": "collect",
       "implementation": "rust_decimal",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 10.420387752757353,
-      "low": 10.335641717657342,
-      "high": 10.624480587121212
+      "nanos": 12.660797520965978,
+      "low": 12.62190652566629,
+      "high": 12.698498582287645
     },
     {
       "operation": "div",
       "implementation": "Dec",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 16.931961495535713,
-      "low": 16.76705723001499,
-      "high": 17.336113207267992
+      "nanos": 30.551672800647083,
+      "low": 29.754932099105048,
+      "high": 30.802710150501365
     },
     {
       "operation": "div",
       "implementation": "f64",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 0.7650587469239317,
-      "low": 0.7604430567122286,
-      "high": 0.7772235290638267
+      "nanos": 1.036791875296661,
+      "low": 1.0353161486064677,
+      "high": 1.037624317663516
     },
     {
       "operation": "div",
       "implementation": "fastnum",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 77.4487298427484,
-      "low": 77.25867001488095,
-      "high": 78.64497382155987
+      "nanos": 223.475390625,
+      "low": 201.8104233055784,
+      "high": 271.22361159104565
     },
     {
       "operation": "div",
       "implementation": "rust_decimal",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 26.57955655184659,
-      "low": 25.90121548544657,
-      "high": 27.32219493108165
+      "nanos": 30.75451578776042,
+      "low": 30.69428276909722,
+      "high": 30.898102194165425
     },
     {
       "operation": "floor",
       "implementation": "Dec",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 3.52413350475478,
-      "low": 3.512511885754262,
-      "high": 3.5426233548227293
+      "nanos": 4.968318763953716,
+      "low": 4.965765225214168,
+      "high": 4.972386575475555
     },
     {
       "operation": "floor",
       "implementation": "f64",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 1.0158512517755682,
-      "low": 1.004897762784091,
-      "high": 1.0349812811014556
+      "nanos": 2.7210533361167633,
+      "low": 1.8253661574425015,
+      "high": 2.746269361417945
     },
     {
       "operation": "floor",
       "implementation": "fastnum",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 9.860686510355102,
-      "low": 9.798221149850399,
-      "high": 9.981209621043966
+      "nanos": 14.296844099996084,
+      "low": 14.273268889998434,
+      "high": 14.323171824426542
     },
     {
       "operation": "floor",
       "implementation": "rust_decimal",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 6.681750161572385,
-      "low": 6.633604620494982,
-      "high": 6.829264603724287
+      "nanos": 8.558471604567307,
+      "low": 8.553814102564102,
+      "high": 8.564948208800747
     },
     {
       "operation": "format",
       "implementation": "Dec",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 23.49958993820917,
-      "low": 23.333548166445397,
-      "high": 23.841090580455045
+      "nanos": 35.93530144011008,
+      "low": 35.78708187054984,
+      "high": 36.10375899302808
     },
     {
       "operation": "format",
       "implementation": "f64",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 56.48477749911221,
-      "low": 56.31222605096726,
-      "high": 57.675961100260416
+      "nanos": 80.77791558330063,
+      "low": 80.54550012831837,
+      "high": 81.00075922227444
     },
     {
       "operation": "format",
       "implementation": "fastnum",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 45.17470414697449,
-      "low": 44.590423912130376,
-      "high": 45.6263899254937
+      "nanos": 69.84369913736978,
+      "low": 69.69494018554687,
+      "high": 70.37984232584635
     },
     {
       "operation": "format",
       "implementation": "rust_decimal",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 29.81912007794031,
-      "low": 29.12586684875685,
-      "high": 30.479364316683288
+      "nanos": 44.92161598342294,
+      "low": 44.75620589717742,
+      "high": 45.012938140540996
     },
     {
       "operation": "format_digits",
       "implementation": "Dec",
       "parameter": "1",
       "count": 1024,
-      "nanos": 12.706264455205956,
-      "low": 12.643191661697855,
-      "high": 12.829229233626046
+      "nanos": 27.290281493456757,
+      "low": 27.100696678410948,
+      "high": 27.55381093409586
     },
     {
       "operation": "format_digits",
       "implementation": "Dec",
       "parameter": "12",
       "count": 1024,
-      "nanos": 28.26322352671537,
-      "low": 27.874497483145042,
-      "high": 28.55966480444974
+      "nanos": 60.153293268215975,
+      "low": 59.02531270777925,
+      "high": 61.11329636121857
     },
     {
       "operation": "format_digits",
       "implementation": "Dec",
       "parameter": "18",
       "count": 1024,
-      "nanos": 33.07054758478227,
-      "low": 32.866178136293584,
-      "high": 33.772156197684154
+      "nanos": 45.5837191877694,
+      "low": 43.51091929412341,
+      "high": 47.52303761449353
     },
     {
       "operation": "format_digits",
       "implementation": "Dec",
       "parameter": "19",
       "count": 1024,
-      "nanos": 33.98437540187757,
-      "low": 33.63278160566165,
-      "high": 34.40273182752125
+      "nanos": 48.34683486476089,
+      "low": 47.36851297470338,
+      "high": 52.17693592418324
     },
     {
       "operation": "format_digits",
       "implementation": "Dec",
       "parameter": "22",
       "count": 1024,
-      "nanos": 37.440339292868586,
-      "low": 37.225544921875,
-      "high": 37.67383424707602
+      "nanos": 73.82159338164749,
+      "low": 73.45237789297462,
+      "high": 75.14744487561677
     },
     {
       "operation": "format_digits",
       "implementation": "Dec",
       "parameter": "26",
       "count": 1024,
-      "nanos": 42.842571423100495,
-      "low": 42.11204400367608,
-      "high": 44.18155546348906
+      "nanos": 85.356748046875,
+      "low": 80.68695882161458,
+      "high": 91.15648871527779
     },
     {
       "operation": "format_digits",
       "implementation": "Dec",
       "parameter": "4",
       "count": 1024,
-      "nanos": 21.549662543402775,
-      "low": 21.34716558398199,
-      "high": 21.659841371193913
+      "nanos": 30.01654522235577,
+      "low": 29.912037831959708,
+      "high": 30.201067051670428
     },
     {
       "operation": "format_digits",
       "implementation": "Dec",
       "parameter": "8",
       "count": 1024,
-      "nanos": 24.65666653679349,
-      "low": 24.576517061638846,
-      "high": 24.794099738101586
+      "nanos": 35.203257262902696,
+      "low": 35.00372888287927,
+      "high": 35.63804483006143
     },
     {
       "operation": "format_digits",
       "implementation": "fastnum",
       "parameter": "1",
       "count": 1024,
-      "nanos": 34.52732231987847,
-      "low": 34.38754408616286,
-      "high": 35.81857609468348
+      "nanos": 69.65721405773628,
+      "low": 68.81121126951682,
+      "high": 70.42970337906505
     },
     {
       "operation": "format_digits",
       "implementation": "fastnum",
       "parameter": "12",
       "count": 1024,
-      "nanos": 68.37734723772321,
-      "low": 68.1443837483724,
-      "high": 69.16595153808593
+      "nanos": 117.77449815538195,
+      "low": 107.77520662524324,
+      "high": 134.46558634440106
     },
     {
       "operation": "format_digits",
       "implementation": "fastnum",
       "parameter": "18",
       "count": 1024,
-      "nanos": 90.50868288070437,
-      "low": 89.89301886307567,
-      "high": 92.98866861979167
+      "nanos": 116.97275797526041,
+      "low": 115.44056662535056,
+      "high": 119.44646267361111
     },
     {
       "operation": "format_digits",
       "implementation": "fastnum",
       "parameter": "19",
       "count": 1024,
-      "nanos": 93.96048909505208,
-      "low": 92.26650010850695,
-      "high": 96.40562569754465
+      "nanos": 118.70177687260143,
+      "low": 118.04048665364583,
+      "high": 120.14914757864815
     },
     {
       "operation": "format_digits",
       "implementation": "fastnum",
       "parameter": "22",
       "count": 1024,
-      "nanos": 90.81883033014114,
-      "low": 90.60719794816868,
-      "high": 91.43106177545363
+      "nanos": 119.52495324337121,
+      "low": 109.50877778348867,
+      "high": 164.265869140625
     },
     {
       "operation": "format_digits",
       "implementation": "fastnum",
       "parameter": "26",
       "count": 1024,
-      "nanos": 105.52796465084876,
-      "low": 104.33555772569446,
-      "high": 109.54013359506524
+      "nanos": 194.67603567023025,
+      "low": 190.46825900607638,
+      "high": 219.77383225859788
     },
     {
       "operation": "format_digits",
       "implementation": "fastnum",
       "parameter": "4",
       "count": 1024,
-      "nanos": 48.1662263569079,
-      "low": 48.036346751293294,
-      "high": 48.713189376027955
+      "nanos": 68.10523315429688,
+      "low": 67.80582034462377,
+      "high": 68.66201338334517
     },
     {
       "operation": "format_digits",
       "implementation": "fastnum",
       "parameter": "8",
       "count": 1024,
-      "nanos": 53.63018157176482,
-      "low": 53.20357734306709,
-      "high": 55.47778609236316
+      "nanos": 70.65767613002231,
+      "low": 70.2641335880055,
+      "high": 70.76729016985212
     },
     {
       "operation": "format_digits",
       "implementation": "rust_decimal",
       "parameter": "1",
       "count": 1024,
-      "nanos": 19.674924386662546,
-      "low": 19.563030142292416,
-      "high": 20.106194491254094
+      "nanos": 37.37203658585696,
+      "low": 26.050316459944156,
+      "high": 37.82232671976736
     },
     {
       "operation": "format_digits",
       "implementation": "rust_decimal",
       "parameter": "12",
       "count": 1024,
-      "nanos": 46.54110049293155,
-      "low": 45.42415839301215,
-      "high": 47.219155157180055
+      "nanos": 68.47680263174774,
+      "low": 67.68662512149257,
+      "high": 70.0665347450658
     },
     {
       "operation": "format_digits",
       "implementation": "rust_decimal",
       "parameter": "18",
       "count": 1024,
-      "nanos": 60.16548955343096,
-      "low": 59.56918982776534,
-      "high": 60.72405032835145
+      "nanos": 144.95942160866477,
+      "low": 141.74567545572916,
+      "high": 160.63201751708985
     },
     {
       "operation": "format_digits",
       "implementation": "rust_decimal",
       "parameter": "19",
       "count": 1024,
-      "nanos": 62.948640175471226,
-      "low": 62.275566520467834,
-      "high": 64.43207171404802
+      "nanos": 134.4512087673611,
+      "low": 131.027001953125,
+      "high": 140.21455033735796
     },
     {
       "operation": "format_digits",
       "implementation": "rust_decimal",
       "parameter": "22",
       "count": 1024,
-      "nanos": 70.10640462239583,
-      "low": 69.85183536305146,
-      "high": 70.97204182942708
+      "nanos": 95.74134858230065,
+      "low": 94.90263419315733,
+      "high": 97.33086636894893
     },
     {
       "operation": "format_digits",
       "implementation": "rust_decimal",
       "parameter": "26",
       "count": 1024,
-      "nanos": 80.08221693862204,
-      "low": 79.4789791046627,
-      "high": 82.25754383799793
+      "nanos": 106.41795402473502,
+      "low": 106.11546614464095,
+      "high": 106.79601487379807
     },
     {
       "operation": "format_digits",
       "implementation": "rust_decimal",
       "parameter": "4",
       "count": 1024,
-      "nanos": 23.51915314503205,
-      "low": 23.310001299698563,
-      "high": 23.626422327807823
+      "nanos": 33.82655227530716,
+      "low": 33.414595942794186,
+      "high": 33.99136083010595
     },
     {
       "operation": "format_digits",
       "implementation": "rust_decimal",
       "parameter": "8",
       "count": 1024,
-      "nanos": 35.09103902180989,
-      "low": 34.80487282492898,
-      "high": 35.58935623168945
+      "nanos": 75.38901939048424,
+      "low": 74.69917266596954,
+      "high": 79.42346356366131
     },
     {
       "operation": "from_f64",
       "implementation": "Dec",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 8.927412315703823,
-      "low": 8.747364125163553,
-      "high": 8.972846871345752
+      "nanos": 11.961059697138799,
+      "low": 11.823748148999183,
+      "high": 13.510650227864584
     },
     {
       "operation": "from_f64",
       "implementation": "fastnum",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 75.77848917643229,
-      "low": 75.53060711005455,
-      "high": 77.1347900390625
+      "nanos": 97.28184450470651,
+      "low": 97.11503775293343,
+      "high": 97.7238189246267
     },
     {
       "operation": "from_f64",
       "implementation": "rust_decimal",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 80.89817725740865,
-      "low": 80.1494285748839,
-      "high": 82.73372587316176
+      "nanos": 123.27215976117344,
+      "low": 120.64055782903439,
+      "high": 123.63041308560156
     },
     {
       "operation": "mul",
       "implementation": "Dec",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 3.3252747855440434,
-      "low": 3.280340410630944,
-      "high": 3.365321826727726
+      "nanos": 5.347214939775626,
+      "low": 3.93913246799836,
+      "high": 6.0381997475728175
     },
     {
       "operation": "mul",
       "implementation": "f64",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 0.15657157535507615,
-      "low": 0.15421554008464056,
-      "high": 0.16018043215285907
+      "nanos": 0.24179254229507163,
+      "low": 0.24148542005685836,
+      "high": 0.24241432901765547
     },
     {
       "operation": "mul",
       "implementation": "fastnum",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 4.393362281436012,
-      "low": 4.327857900683421,
-      "high": 4.44157053283553
+      "nanos": 7.365543090489499,
+      "low": 7.358675859049017,
+      "high": 7.385378545883441
     },
     {
       "operation": "mul",
       "implementation": "rust_decimal",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 6.130688831446984,
-      "low": 6.0783452340141455,
-      "high": 6.154145240930523
+      "nanos": 7.514403234470191,
+      "low": 7.50462132700053,
+      "high": 7.525901662960999
     },
     {
       "operation": "parse",
       "implementation": "Dec",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 7.299570345160953,
-      "low": 7.226030233631963,
-      "high": 7.533755031925304
+      "nanos": 12.48322472205529,
+      "low": 12.41710661300505,
+      "high": 12.581877037147422
     },
     {
       "operation": "parse",
       "implementation": "f64",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 6.490761860842428,
-      "low": 6.436838377929297,
-      "high": 6.575038946242559
+      "nanos": 13.583174991393998,
+      "low": 13.348563227342666,
+      "high": 13.774187936134709
     },
     {
       "operation": "parse",
       "implementation": "fastnum",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 15.38536354093516,
-      "low": 15.135186241807116,
-      "high": 15.84706338603845
+      "nanos": 23.928861667798913,
+      "low": 23.45621452203961,
+      "high": 24.19688773777174
     },
     {
       "operation": "parse",
       "implementation": "rust_decimal",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 10.809676046289022,
-      "low": 10.726535075197937,
-      "high": 10.93299577422955
+      "nanos": 15.341814705495084,
+      "low": 14.357235919699985,
+      "high": 15.69732910940008
     },
     {
       "operation": "parse_digits",
       "implementation": "Dec",
       "parameter": "1",
       "count": 1024,
-      "nanos": 3.9045339697195165,
-      "low": 3.8876858005275974,
-      "high": 3.9610485385259233
+      "nanos": 7.536916253505609,
+      "low": 7.50131338303488,
+      "high": 7.563906331763475
     },
     {
       "operation": "parse_digits",
       "implementation": "Dec",
       "parameter": "12",
       "count": 1024,
-      "nanos": 10.245322193818934,
-      "low": 10.197003832050399,
-      "high": 10.497753053552964
+      "nanos": 17.4032620070782,
+      "low": 17.354540804247833,
+      "high": 17.460118477299527
     },
     {
       "operation": "parse_digits",
       "implementation": "Dec",
       "parameter": "18",
       "count": 1024,
-      "nanos": 14.598493799318039,
-      "low": 14.536727827730184,
-      "high": 15.07716826221827
+      "nanos": 21.675145570855392,
+      "low": 21.63776279631115,
+      "high": 21.714675697913535
     },
     {
       "operation": "parse_digits",
       "implementation": "Dec",
       "parameter": "19",
       "count": 1024,
-      "nanos": 15.39872639572807,
-      "low": 15.329932062198452,
-      "high": 15.797419417083212
+      "nanos": 22.55742390474056,
+      "low": 22.51065268139903,
+      "high": 22.576079607568246
     },
     {
       "operation": "parse_digits",
       "implementation": "Dec",
       "parameter": "22",
       "count": 1024,
-      "nanos": 20.38962839163986,
-      "low": 20.36371628429016,
-      "high": 20.493339089786303
+      "nanos": 28.891225149990674,
+      "low": 28.81371911223371,
+      "high": 28.944888699910287
     },
     {
       "operation": "parse_digits",
       "implementation": "Dec",
       "parameter": "26",
       "count": 1024,
-      "nanos": 27.417894540918937,
-      "low": 27.276581986624144,
-      "high": 28.1155280222718
+      "nanos": 36.37239733244243,
+      "low": 36.31370739470747,
+      "high": 36.52787799294661
     },
     {
       "operation": "parse_digits",
       "implementation": "Dec",
       "parameter": "4",
       "count": 1024,
-      "nanos": 5.787394512181834,
-      "low": 5.766664767845686,
-      "high": 5.805784810859818
+      "nanos": 10.799317298777595,
+      "low": 10.750788099846392,
+      "high": 10.869652663503732
     },
     {
       "operation": "parse_digits",
       "implementation": "Dec",
       "parameter": "8",
       "count": 1024,
-      "nanos": 7.890167887676308,
-      "low": 7.7829786397643,
-      "high": 7.957989805480537
+      "nanos": 13.707635845401423,
+      "low": 12.812107588605183,
+      "high": 13.827449111205423
     },
     {
       "operation": "parse_digits",
       "implementation": "f64",
       "parameter": "1",
       "count": 1024,
-      "nanos": 3.669423437193387,
-      "low": 3.627532494642527,
-      "high": 3.762288791530735
+      "nanos": 6.22266991746614,
+      "low": 6.211642196609434,
+      "high": 6.253791903542693
     },
     {
       "operation": "parse_digits",
       "implementation": "f64",
       "parameter": "12",
       "count": 1024,
-      "nanos": 9.789173056048188,
-      "low": 9.576804996298872,
-      "high": 9.833082471135928
+      "nanos": 14.382466696714744,
+      "low": 14.205592615464155,
+      "high": 14.719110845209478
     },
     {
       "operation": "parse_digits",
       "implementation": "f64",
       "parameter": "18",
       "count": 1024,
-      "nanos": 10.390057565363287,
-      "low": 10.306044039243885,
-      "high": 10.765347862900605
+      "nanos": 15.196752215826024,
+      "low": 15.034887582284433,
+      "high": 15.270722415123457
     },
     {
       "operation": "parse_digits",
       "implementation": "f64",
       "parameter": "19",
       "count": 1024,
-      "nanos": 10.752535452638618,
-      "low": 10.645190524683851,
-      "high": 10.903207995146321
+      "nanos": 15.633367678539901,
+      "low": 15.600344003795904,
+      "high": 15.70370358581263
     },
     {
       "operation": "parse_digits",
       "implementation": "f64",
       "parameter": "22",
       "count": 1024,
-      "nanos": 29.244194151363832,
-      "low": 28.883922354052565,
-      "high": 30.01395412888899
+      "nanos": 39.33728141963762,
+      "low": 38.84666986292757,
+      "high": 40.09418876540493
     },
     {
       "operation": "parse_digits",
       "implementation": "f64",
       "parameter": "26",
       "count": 1024,
-      "nanos": 30.090305333395094,
-      "low": 29.759129557797134,
-      "high": 30.5340705041216
+      "nanos": 40.82066127232143,
+      "low": 40.56625751429044,
+      "high": 41.158503819378126
     },
     {
       "operation": "parse_digits",
       "implementation": "f64",
       "parameter": "4",
       "count": 1024,
-      "nanos": 5.4548193713340645,
-      "low": 5.4186806919087775,
-      "high": 5.500644067670819
+      "nanos": 10.021924145951097,
+      "low": 9.935659407175129,
+      "high": 10.054423468061488
     },
     {
       "operation": "parse_digits",
       "implementation": "f64",
       "parameter": "8",
       "count": 1024,
-      "nanos": 7.438803736337317,
-      "low": 7.376197905188131,
-      "high": 7.507298607267542
+      "nanos": 12.903214744332171,
+      "low": 12.793986178087096,
+      "high": 12.978613396410672
     },
     {
       "operation": "parse_digits",
       "implementation": "fastnum",
       "parameter": "1",
       "count": 1024,
-      "nanos": 14.185567609574434,
-      "low": 14.014764536311464,
-      "high": 14.366049120925956
+      "nanos": 17.193163861561214,
+      "low": 17.124941112377027,
+      "high": 17.23357950636395
     },
     {
       "operation": "parse_digits",
       "implementation": "fastnum",
       "parameter": "12",
       "count": 1024,
-      "nanos": 16.327781531900833,
-      "low": 16.26634693730828,
-      "high": 16.53470111044162
+      "nanos": 26.55414347456705,
+      "low": 26.202957931219363,
+      "high": 26.966946634166806
     },
     {
       "operation": "parse_digits",
       "implementation": "fastnum",
       "parameter": "18",
       "count": 1024,
-      "nanos": 18.533331561791385,
-      "low": 18.4112586941828,
-      "high": 18.91183838444232
+      "nanos": 29.58622486648928,
+      "low": 29.37146191502748,
+      "high": 29.878439577469912
     },
     {
       "operation": "parse_digits",
       "implementation": "fastnum",
       "parameter": "19",
       "count": 1024,
-      "nanos": 22.065656758130082,
-      "low": 21.858222775342988,
-      "high": 22.30014926321138
+      "nanos": 33.27043151855469,
+      "low": 33.02505975542897,
+      "high": 33.4210211995142
     },
     {
       "operation": "parse_digits",
       "implementation": "fastnum",
       "parameter": "22",
       "count": 1024,
-      "nanos": 25.830820364169973,
-      "low": 25.746375868055555,
-      "high": 25.984325009300598
+      "nanos": 43.71606016054258,
+      "low": 43.611200788909315,
+      "high": 44.17646479009272
     },
     {
       "operation": "parse_digits",
       "implementation": "fastnum",
       "parameter": "26",
       "count": 1024,
-      "nanos": 27.903522862025667,
-      "low": 27.513080566406252,
-      "high": 28.497361219618057
+      "nanos": 48.45601899890179,
+      "low": 48.35574703289631,
+      "high": 48.5564089018723
     },
     {
       "operation": "parse_digits",
       "implementation": "fastnum",
       "parameter": "4",
       "count": 1024,
-      "nanos": 14.96024644134917,
-      "low": 14.797559231290801,
-      "high": 15.223932912956428
+      "nanos": 19.64956844407685,
+      "low": 19.612390361075214,
+      "high": 19.6943243854032
     },
     {
       "operation": "parse_digits",
       "implementation": "fastnum",
       "parameter": "8",
       "count": 1024,
-      "nanos": 15.544738884475048,
-      "low": 15.412953828762554,
-      "high": 15.742581717033849
+      "nanos": 21.922877249858278,
+      "low": 21.675052809061597,
+      "high": 21.97160285107662
     },
     {
       "operation": "parse_digits",
       "implementation": "rust_decimal",
       "parameter": "1",
       "count": 1024,
-      "nanos": 9.560696037896246,
-      "low": 9.41804482439439,
-      "high": 9.633473633305528
+      "nanos": 10.648646733352175,
+      "low": 10.625696210836562,
+      "high": 10.67273431822311
     },
     {
       "operation": "parse_digits",
       "implementation": "rust_decimal",
       "parameter": "12",
       "count": 1024,
-      "nanos": 13.769114692804173,
-      "low": 13.715159891090002,
-      "high": 13.992291600571065
+      "nanos": 19.44143936332615,
+      "low": 19.115072316136853,
+      "high": 19.627850383890085
     },
     {
       "operation": "parse_digits",
       "implementation": "rust_decimal",
       "parameter": "18",
       "count": 1024,
-      "nanos": 17.225442410935948,
-      "low": 17.113011104001394,
-      "high": 17.685413940946532
+      "nanos": 23.241843674516907,
+      "low": 23.15559137100564,
+      "high": 23.536635954483696
     },
     {
       "operation": "parse_digits",
       "implementation": "rust_decimal",
       "parameter": "19",
       "count": 1024,
-      "nanos": 20.418888591106672,
-      "low": 20.350375100698173,
-      "high": 20.53295776061247
+      "nanos": 30.118638741629464,
+      "low": 28.795368580537684,
+      "high": 31.32630818684896
     },
     {
       "operation": "parse_digits",
       "implementation": "rust_decimal",
       "parameter": "22",
       "count": 1024,
-      "nanos": 26.698667988974666,
-      "low": 26.52489546891097,
-      "high": 27.084029760116188
+      "nanos": 37.01108041914682,
+      "low": 36.870698133680555,
+      "high": 37.38089831912879
     },
     {
       "operation": "parse_digits",
       "implementation": "rust_decimal",
       "parameter": "26",
       "count": 1024,
-      "nanos": 30.77503684749354,
-      "low": 30.577648660411008,
-      "high": 31.455941639775816
+      "nanos": 41.38123807040128,
+      "low": 39.67797368624395,
+      "high": 41.77578111721178
     },
     {
       "operation": "parse_digits",
       "implementation": "rust_decimal",
       "parameter": "4",
       "count": 1024,
-      "nanos": 10.345273016674588,
-      "low": 10.294373811787072,
-      "high": 10.64221599854444
+      "nanos": 13.114564831319822,
+      "low": 13.061640565493821,
+      "high": 13.248798398590152
     },
     {
       "operation": "parse_digits",
       "implementation": "rust_decimal",
       "parameter": "8",
       "count": 1024,
-      "nanos": 12.70727577631319,
-      "low": 12.678760048463007,
-      "high": 12.97381838129833
+      "nanos": 17.74767829419929,
+      "low": 17.60738685656449,
+      "high": 17.836767108623796
     },
     {
       "operation": "round_dp",
       "implementation": "Dec",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 4.183082128107426,
-      "low": 4.112330535814917,
-      "high": 4.222281485863336
+      "nanos": 6.012996763641425,
+      "low": 5.9338147691446395,
+      "high": 6.043866107263828
     },
     {
       "operation": "round_dp",
       "implementation": "f64",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 0.9056778703882606,
-      "low": 0.8994389850232876,
-      "high": 0.9315259228290904
+      "nanos": 1.4402067644677907,
+      "low": 1.4368667488211142,
+      "high": 1.44185449698041
     },
     {
       "operation": "round_dp",
       "implementation": "fastnum",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 7.469525429932556,
-      "low": 7.3958087465807365,
-      "high": 7.597794386378707
+      "nanos": 10.9698818359375,
+      "low": 10.961088727678572,
+      "high": 10.98842952665441
     },
     {
       "operation": "round_dp",
       "implementation": "rust_decimal",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 13.348044002757351,
-      "low": 13.268225898570066,
-      "high": 13.620208242630934
+      "nanos": 16.804091163917825,
+      "low": 16.774789945899972,
+      "high": 16.84777085208762
     },
     {
       "operation": "round_to_step",
       "implementation": "Dec",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 3.3316252261102797,
-      "low": 3.310052314139477,
-      "high": 3.3930813808962954
+      "nanos": 4.4813413684000105,
+      "low": 4.472032318518659,
+      "high": 4.524294518251014
     },
     {
       "operation": "round_to_step",
       "implementation": "f64",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 1.0385700117670305,
-      "low": 1.0284635380746419,
-      "high": 1.0585991062862692
+      "nanos": 1.6233275744152729,
+      "low": 1.609372388096882,
+      "high": 1.6393274295628677
     },
     {
       "operation": "round_to_step",
       "implementation": "fastnum",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 19.73060070219494,
-      "low": 19.481114545549666,
-      "high": 20.154775457768334
+      "nanos": 28.809755582335995,
+      "low": 28.62798446566731,
+      "high": 29.127719630664384
     },
     {
       "operation": "round_to_step",
       "implementation": "rust_decimal",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 24.06494295022233,
-      "low": 24.011811507107023,
-      "high": 24.729683689841963
+      "nanos": 31.348651778796487,
+      "low": 31.270695378648618,
+      "high": 31.404642793729707
     },
     {
       "operation": "to_f64",
       "implementation": "Dec",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 1.3456926407182919,
-      "low": 1.3328230897585551,
-      "high": 1.377913416756524
+      "nanos": 1.6571075505567414,
+      "low": 1.6517928079600486,
+      "high": 1.677588966044218
     },
     {
       "operation": "to_f64",
       "implementation": "fastnum",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 1.8842180805821573,
-      "low": 1.8662163543843981,
-      "high": 1.9017728425535765
+      "nanos": 4.237470221608261,
+      "low": 2.965878390304571,
+      "high": 4.467122028109069
     },
     {
       "operation": "to_f64",
       "implementation": "rust_decimal",
       "parameter": "1024",
       "count": 1024,
-      "nanos": 17.013907666227002,
-      "low": 16.870106928661617,
-      "high": 17.204555462667038
+      "nanos": 17.494703253845394,
+      "low": 17.473685185205994,
+      "high": 17.577757668796973
     }
   ]
 }

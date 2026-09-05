@@ -1,0 +1,493 @@
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------------
+ * Palette
+ *
+ * Carried over from the single-page report. Colors come from the validated
+ * categorical palette. f64 is drawn in neutral ink rather than a categorical
+ * hue: it is the inexact reference the decimals are measured against, not a
+ * fourth competitor. That leaves three series, which clear the CVD and
+ * normal-vision floors on every pair in both modes.
+ *
+ * The tokens are declared on bare `:root` first so a value never has its only
+ * definition inside a media query, then overridden for the system preference
+ * and again for an explicit choice, so the toggle wins in both directions.
+ */
+:root {
+  color-scheme: light;
+  --plane: #f9f9f7;
+  --surface: #fcfcfb;
+  --ink: #0b0b0b;
+  --ink-soft: #52514e;
+  --ink-muted: #898781;
+  --rule: #e1e0d9;
+  --border: rgba(11, 11, 11, 0.1);
+  --reference: #c3c2b7;
+  --reference-ink: #6f6e69;
+  --dec: #2a78d6;
+  --rust-decimal: #eb6834;
+  --fastnum: #1baf7a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --plane: #0d0d0d;
+    --surface: #1a1a19;
+    --ink: #ffffff;
+    --ink-soft: #c3c2b7;
+    --ink-muted: #898781;
+    --rule: #2c2c2a;
+    --border: rgba(255, 255, 255, 0.1);
+    --reference: #55554f;
+    --reference-ink: #a3a29b;
+    --dec: #3987e5;
+    --rust-decimal: #d95926;
+    --fastnum: #199e70;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --plane: #0d0d0d;
+  --surface: #1a1a19;
+  --ink: #ffffff;
+  --ink-soft: #c3c2b7;
+  --ink-muted: #898781;
+  --rule: #2c2c2a;
+  --border: rgba(255, 255, 255, 0.1);
+  --reference: #55554f;
+  --reference-ink: #a3a29b;
+  --dec: #3987e5;
+  --rust-decimal: #d95926;
+  --fastnum: #199e70;
+}
+
+/* Expose the palette to Tailwind so a new page can reach for `bg-surface` or
+ * `text-ink-soft` and follow the theme without restating a hex anywhere. */
+@theme inline {
+  --color-plane: var(--plane);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-muted: var(--ink-muted);
+  --color-rule: var(--rule);
+  --color-reference: var(--reference);
+  --color-dec: var(--dec);
+  --color-rust-decimal: var(--rust-decimal);
+  --color-fastnum: var(--fastnum);
+}
+
+/* ------------------------------------------------------------------------
+ * Shell
+ */
+body {
+  margin: 0;
+  background: var(--plane);
+  color: var(--ink);
+  font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.wrap {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 26px 24px 96px;
+}
+
+nav.top {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-bottom: 30px;
+  font-size: 13.5px;
+}
+nav.top a {
+  color: var(--ink-soft);
+  text-decoration: none;
+  padding: 5px 10px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+}
+nav.top a:hover {
+  background: var(--surface);
+  color: var(--ink);
+}
+nav.top a[aria-current="page"] {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--ink);
+  font-weight: 550;
+}
+nav.top .spacer {
+  flex: 1;
+}
+nav.top .mark {
+  font-weight: 650;
+  color: var(--ink);
+  padding-left: 0;
+}
+/* Off the site, and set apart by the rule before them rather than by a lighter
+   ink: muted ink at this size lands near 3:1 against the plane, under the
+   contrast floor for something meant to be clicked. */
+nav.top .divider {
+  width: 1px;
+  align-self: stretch;
+  margin: 4px 6px;
+  background: var(--rule);
+}
+
+.theme-toggle {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--ink-soft);
+  border-radius: 7px;
+  width: 30px;
+  height: 28px;
+  cursor: pointer;
+  line-height: 1;
+  font-size: 13px;
+}
+.theme-toggle:hover {
+  color: var(--ink);
+}
+
+header {
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 28px;
+}
+h1 {
+  font-size: 30px;
+  line-height: 1.2;
+  margin: 0 0 8px;
+  letter-spacing: -0.02em;
+}
+.lede {
+  margin: 0;
+  max-width: 62ch;
+  color: var(--ink-soft);
+}
+.provenance {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 20px;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+.chip {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 11px;
+}
+.chip b {
+  color: var(--ink-muted);
+  font-weight: 500;
+}
+
+h2 {
+  font-size: 19px;
+  margin: 48px 0 6px;
+  letter-spacing: -0.01em;
+}
+h2 + p {
+  margin: 0 0 20px;
+  color: var(--ink-soft);
+  max-width: 62ch;
+  font-size: 14px;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin: 0 0 24px;
+  font-size: 13px;
+}
+.legend span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink-soft);
+}
+.swatch {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  flex: none;
+}
+
+/* ------------------------------------------------------------------------
+ * Charts
+ *
+ * `.cards` rather than `.grid`: Tailwind ships a `grid` utility, and a page
+ * reaching for it should get `display: grid` and not this layout.
+ */
+.cards {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+}
+.cards.wide {
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+}
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 15px 16px 13px;
+}
+.card h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.card .caption {
+  margin: 1px 0 13px;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+.bars {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bar-row {
+  display: grid;
+  grid-template-columns: 88px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+.bar-name {
+  color: var(--ink-soft);
+  text-align: right;
+}
+/* the track is the full width of the slowest bar in this chart, so every
+   chart is read on its own scale: cmp at 4ns and parse at 100ns do not
+   share an axis */
+.track {
+  height: 13px;
+  border-radius: 3px;
+  position: relative;
+}
+.bar {
+  height: 100%;
+  border-radius: 0 4px 4px 0;
+  min-width: 2px;
+  transition: filter 0.12s;
+}
+.bar-row:hover .bar {
+  filter: brightness(1.08);
+}
+.bar-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-soft);
+  min-width: 62px;
+  text-align: right;
+}
+.absent {
+  color: var(--ink-muted);
+  font-style: italic;
+}
+
+.sweep {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+.sweep .gridline {
+  stroke: var(--rule);
+  stroke-width: 1;
+}
+.sweep .tick {
+  fill: var(--ink-muted);
+  font-size: 11px;
+}
+.sweep .axis {
+  fill: var(--ink-soft);
+  font-size: 12px;
+}
+.sweep .tag {
+  font-size: 12px;
+  font-weight: 600;
+}
+.sweep .end {
+  text-anchor: end;
+}
+.sweep .mid {
+  text-anchor: middle;
+}
+.sweep .dot {
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+
+/* ------------------------------------------------------------------------
+ * Tables
+ */
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 13.5px;
+}
+caption {
+  caption-side: bottom;
+  padding-top: 12px;
+  color: var(--ink-muted);
+  font-size: 12.5px;
+  text-align: left;
+}
+th,
+td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--rule);
+}
+thead th {
+  text-align: right;
+  font-weight: 600;
+  color: var(--ink-soft);
+  font-size: 12.5px;
+}
+thead th:first-child,
+tbody th {
+  text-align: left;
+}
+tbody th {
+  font-weight: 500;
+}
+td {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+td.best {
+  font-weight: 650;
+  color: var(--ink);
+}
+td.best::after {
+  content: " \2605";
+  color: var(--ink-muted);
+  font-size: 10px;
+}
+td.none {
+  color: var(--ink-muted);
+}
+.scroll {
+  overflow-x: auto;
+}
+
+/* ------------------------------------------------------------------------
+ * Prose, for the pages rendered from docs/*.md
+ */
+.prose {
+  max-width: 72ch;
+}
+.prose h2 {
+  margin: 40px 0 10px;
+}
+.prose h3 {
+  font-size: 15.5px;
+  margin: 28px 0 8px;
+}
+.prose p,
+.prose ul,
+.prose ol {
+  margin: 0 0 14px;
+  color: var(--ink-soft);
+}
+.prose ul,
+.prose ol {
+  padding-left: 22px;
+}
+.prose li {
+  margin: 4px 0;
+}
+.prose li::marker {
+  color: var(--ink-muted);
+}
+.prose a {
+  color: var(--dec);
+  text-decoration-color: var(--border);
+  text-underline-offset: 2px;
+}
+.prose strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+.prose blockquote {
+  margin: 0 0 14px;
+  padding-left: 14px;
+  border-left: 2px solid var(--rule);
+  color: var(--ink-muted);
+}
+.prose table {
+  margin: 0 0 18px;
+}
+.prose td {
+  text-align: left;
+}
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.92em;
+}
+.prose :not(pre) > code {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.prose pre {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 13px 15px;
+  overflow-x: auto;
+  margin: 0 0 16px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* ------------------------------------------------------------------------
+ * Footer and tooltip
+ */
+footer {
+  margin-top: 56px;
+  padding-top: 20px;
+  border-top: 1px solid var(--rule);
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+footer a {
+  color: inherit;
+}
+footer .links {
+  margin: 10px 0 0;
+}
+
+#tip {
+  position: fixed;
+  z-index: 10;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.1s;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 7px 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.13);
+  font-variant-numeric: tabular-nums;
+  max-width: 240px;
+}
+#tip b {
+  display: block;
+  font-size: 12.5px;
+}
+#tip span {
+  color: var(--ink-muted);
+}

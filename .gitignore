@@ -1,4 +1,8 @@
 __pycache__
 
 target/
-site/
+
+# the site is a source project now; only its build output and deps are ignored
+site/dist/
+site/node_modules/
+site/.astro/

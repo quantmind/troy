@@ -80,10 +80,12 @@ reference, not a competitor; **bold** marks the fastest decimal.
 | to f64 | — | **1.31** | 16.80 | 1.88 |
 | from f64 | — | **8.89** | 81.51 | 75.94 |
 
-Run them yourself with `make bench`, or `make bench-save` to record a snapshot
-and `make bench-page` to render the page locally. Published numbers come from a
-committed snapshot rather than a CI run, because a shared runner varies by more
-than the differences being measured.
+The full set, the order book benchmarks and the digit sweeps are published at
+[troy.quantmind.com](https://troy.quantmind.com). Run them yourself with `make
+bench`, or `make bench-save` to record a snapshot and `make site` to build the
+pages locally. Published numbers come from a committed snapshot rather than a
+CI run, because a shared runner varies by more than the differences being
+measured.
 
 ## Features
 
