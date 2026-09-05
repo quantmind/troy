@@ -60,6 +60,8 @@ export const OPERATIONS: Described[] = [
   { operation: "add", caption: "Add into an accumulator" },
   { operation: "mul", caption: "Multiply price by size" },
   { operation: "div", caption: "Divide price by size" },
+  { operation: "sqrt", caption: "Square root of a price" },
+  { operation: "sqrt_approx", caption: "Square root through f64" },
   { operation: "round_dp", caption: "Round to 2 decimal places" },
   { operation: "round_to_step", caption: "Round to a 0.01 step" },
   { operation: "floor", caption: "Floor to an integer" },

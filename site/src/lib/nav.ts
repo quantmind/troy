@@ -7,12 +7,21 @@ export const href = (path: string) => (path ? `${BASE}/${path}` : `${BASE}/`);
 export interface NavItem {
   path: string;
   label: string;
+  /**
+   * The longer name, for where there is room to spell it out: the front page
+   * pills. The nav itself uses `label`, which has a row to fit into.
+   */
+  full?: string;
 }
 
-/** The top nav, in reading order. Adding a page means adding a line here. */
+/**
+ * Every page below the front one, in reading order. Adding a page means adding
+ * a line here: it appears in the top nav and as a pill on the front page, so
+ * the two cannot drift apart.
+ */
 export const NAV: NavItem[] = [
-  { path: "", label: "Arithmetic" },
-  { path: "orderbook", label: "Order book" },
+  { path: "dec", label: "Dec", full: "Dec benchmarks" },
+  { path: "orderbook", label: "Order book", full: "Order book benchmarks" },
   { path: "docs/design", label: "Design" },
   { path: "docs/memory-layout", label: "Memory layout" },
   { path: "docs/release-notes", label: "Release notes" },

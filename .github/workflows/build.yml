@@ -48,7 +48,7 @@ jobs:
         # --test runs each benchmark once instead of measuring it: enough to
         # catch a bench that stopped compiling, fast enough for every PR
         run: |
-          cargo bench --bench arithmetic -- --test
+          cargo bench --bench dec -- --test
           cargo bench --bench orderbook -- --test
 
       - name: Docs

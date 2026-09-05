@@ -1,5 +1,6 @@
-use super::core::{POW10, check_raw, div_round};
-use super::{Dec, ParseDecError};
+use super::core::{POW10, check_raw};
+use super::round::div_strategy;
+use super::{Dec, ParseDecError, RoundingStrategy};
 use rust_decimal::Decimal;
 
 impl Dec {
@@ -18,7 +19,11 @@ impl Dec {
             Some(factor) => *factor,
             None => return Some(Self::ZERO),
         };
-        check_raw(div_round(mantissa, factor)).map(Self::from_raw)
+        // half away from zero, matching what the parser does with excess
+        // precision, so text and a `Decimal` carrying the same digits land
+        // on the same value
+        let strategy = RoundingStrategy::MidpointAwayFromZero;
+        check_raw(div_strategy(mantissa, factor, strategy)).map(Self::from_raw)
     }
 
     /// Widen to a [`Decimal`] at [`Dec::SCALE`] decimal places, or `None` when the

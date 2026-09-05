@@ -1,9 +1,10 @@
 //! Property tests: the invariants that hold for every input, checked against
 //! inputs proptest chooses rather than inputs a person thought of.
 //!
-//! [`tests/oracle.rs`](../oracle.rs) covers multiplication and division against
-//! an exact 256-bit reference. This file covers everything else: the parser,
-//! the renderer, rounding, the `f64` conversions and the operator contracts.
+//! [`tests/oracle.rs`](../oracle.rs) covers multiplication, division and the
+//! square root against an exact 256-bit reference. This file covers everything
+//! else: the parser, the renderer, rounding, the `f64` conversions, the
+//! operator contracts and the properties the root holds whatever its value.
 //!
 //! Each property is stated against something other than a second copy of the
 //! implementation, because a test that reimplements the code it checks agrees
@@ -14,8 +15,13 @@
 //! - the renderer is checked by round trip, and by the shape of what it emits;
 //! - `round_to_step` is checked against `round_dp` on every power of ten, and
 //!   against the definition of a multiple on every other step;
+//! - each rounding strategy is checked against the two steps bracketing the
+//!   value, which the two directed strategies name outright, rather than
+//!   against a second copy of the tie rule;
 //! - `to_f64` is checked against the standard library's float parser, which is
 //!   correctly rounded and shares no code with anything here;
+//! - the square root is checked against `f64::sqrt`, against the squares whose
+//!   roots are exact, and against the ordering it has to preserve;
 //! - the operators are checked against their `checked_` counterparts, which is
 //!   the one place two implementations of the same thing are meant to agree.
 //!
@@ -25,7 +31,7 @@
 use proptest::prelude::*;
 use proptest::test_runner::FileFailurePersistence;
 use std::str::FromStr;
-use troy::{Dec, ParseDecError};
+use troy::{Dec, ParseDecError, RoundingStrategy};
 
 /// The crate root is `src/mod.rs` rather than `src/lib.rs`, so proptest cannot
 /// locate it to place a regression file and warns on every run unless told
@@ -73,6 +79,19 @@ fn any_dec() -> impl Strategy<Value = Dec> {
 /// notional actually lives, and the range `to_f64` has a fast path for.
 fn modest() -> impl Strategy<Value = Dec> {
     (-9_000_000_000_000_000_000_i128..=9_000_000_000_000_000_000).prop_map(Dec::from_raw)
+}
+
+/// Any non-negative finite value, the domain the square root is defined on.
+fn non_negative() -> impl Strategy<Value = Dec> {
+    (0..=MAX_RAW).prop_map(Dec::from_raw)
+}
+
+/// A value carrying at most nine decimal places, small enough that its square
+/// is exact: nine places squared is eighteen, which is the scale, and the
+/// largest such value squares to just inside the range. So the square has an
+/// exact root, and it is the value itself.
+fn exactly_squarable() -> impl Strategy<Value = Dec> {
+    (0_i128..=13_000_000_000_000_000_000).prop_map(|value| Dec::from_raw(value * 1_000_000_000))
 }
 
 /// Finite doubles across the magnitudes the conversion has to cope with: the
@@ -517,6 +536,251 @@ proptest! {
     }
 }
 
+// -- rounding strategies -----------------------------------------------------
+
+/// Every strategy, so a property covers all six rather than the default alone.
+const STRATEGIES: [RoundingStrategy; 6] = [
+    RoundingStrategy::MidpointAwayFromZero,
+    RoundingStrategy::MidpointNearestEven,
+    RoundingStrategy::ToZero,
+    RoundingStrategy::AwayFromZero,
+    RoundingStrategy::ToNegativeInfinity,
+    RoundingStrategy::ToPositiveInfinity,
+];
+
+/// A step small enough that rounding a half-range value up cannot leave the
+/// range, for the same reason the `round_to_step` properties above bound it.
+const MAX_STEP: i128 = 10_i128.pow(24);
+
+proptest! {
+    #![proptest_config(config())]
+
+    /// The plain methods stay the default strategy applied, over the whole
+    /// range rather than the handful of values the unit test names. This
+    /// guards the wiring, not the arithmetic: what pins the arithmetic to what
+    /// the crate did before is
+    /// `test_a_precision_rounds_the_way_round_dp_does`, which checks `round_dp`
+    /// against the renderer, and the unit tests that name the old answers.
+    #[test]
+    fn test_the_plain_methods_are_the_default_strategy(
+        value in any_dec(),
+        dp in 0_u32..=Dec::SCALE,
+        step in 1_i128..=MAX_STEP,
+    ) {
+        prop_assert_eq!(
+            value.round_dp_with(dp, RoundingStrategy::default()),
+            value.round_dp(dp),
+            "{} at {} places",
+            value,
+            dp
+        );
+        let step = Dec::from_raw(step);
+        prop_assert_eq!(
+            value.round_to_step_with(step, RoundingStrategy::default()),
+            value.round_to_step(step),
+            "{} to a step of {}",
+            value,
+            step
+        );
+    }
+
+    /// `round_to_step_with` keeps the power-of-ten fast path, which settles a
+    /// tie on the fraction inside a `u64`, while `round_dp_with` divides the
+    /// signed raw as an i128. The two must agree for every strategy, not only
+    /// for the default the fast path was originally written under.
+    #[test]
+    fn test_the_fast_path_matches_the_general_path_for_every_strategy(value in any_dec()) {
+        for strategy in STRATEGIES {
+            for dp in 0..=Dec::SCALE {
+                let step = Dec::from_raw(10_i128.pow(Dec::SCALE - dp));
+                prop_assert_eq!(
+                    value.round_to_step_with(step, strategy),
+                    value.round_dp_with(dp, strategy),
+                    "{} at {} places under {:?}",
+                    value,
+                    dp,
+                    strategy
+                );
+            }
+        }
+    }
+
+    /// Whatever the strategy, the result lands on the grid: that is what
+    /// rounding to a step means, and the part no strategy may change.
+    #[test]
+    fn test_every_strategy_lands_on_a_multiple_of_its_step(
+        raw in MIN_RAW / 2..=MAX_RAW / 2,
+        step in 1_i128..=MAX_STEP,
+    ) {
+        let (value, step) = (Dec::from_raw(raw), Dec::from_raw(step));
+        for strategy in STRATEGIES {
+            let rounded = value.round_to_step_with(step, strategy);
+            prop_assert!(rounded.is_finite(), "{value} to {step} under {strategy:?} overflowed");
+            prop_assert_eq!(
+                rounded.into_raw() % step.into_raw(),
+                0,
+                "{} is not a multiple of {} under {:?}",
+                rounded,
+                step,
+                strategy
+            );
+        }
+    }
+
+    /// No strategy moves a value by a whole step. A directed one may move it
+    /// almost that far, which is what separates this bound from the half step
+    /// the nearest strategies keep to, but never out of the step it started in.
+    #[test]
+    fn test_no_strategy_moves_by_a_whole_step(
+        raw in MIN_RAW / 2..=MAX_RAW / 2,
+        step in 1_i128..=MAX_STEP,
+    ) {
+        let (value, step) = (Dec::from_raw(raw), Dec::from_raw(step));
+        for strategy in STRATEGIES {
+            let rounded = value.round_to_step_with(step, strategy);
+            prop_assert!(rounded.is_finite(), "{value} to {step} under {strategy:?} overflowed");
+            let drift = rounded.into_raw() - value.into_raw();
+            prop_assert!(
+                drift.abs() < step.into_raw(),
+                "{value} to {step} under {strategy:?} moved {drift}"
+            );
+        }
+    }
+
+    /// Each directed strategy bounds the result on one side, which is the
+    /// whole reason to name one: a bid rounded down never creeps up into the
+    /// spread, a size rounded towards zero never exceeds the balance it came
+    /// from. The two towards-zero strategies sit inside the two directional
+    /// ones, being the same pair of steps chosen by a different rule.
+    #[test]
+    fn test_the_directed_strategies_bound_the_result(
+        raw in MIN_RAW / 2..=MAX_RAW / 2,
+        step in 1_i128..=MAX_STEP,
+    ) {
+        let (value, step) = (Dec::from_raw(raw), Dec::from_raw(step));
+        let down = value.round_to_step_with(step, RoundingStrategy::ToNegativeInfinity);
+        let up = value.round_to_step_with(step, RoundingStrategy::ToPositiveInfinity);
+        let zero = value.round_to_step_with(step, RoundingStrategy::ToZero);
+        let away = value.round_to_step_with(step, RoundingStrategy::AwayFromZero);
+
+        prop_assert!(down <= value, "{down} rounded down is above {value}");
+        prop_assert!(up >= value, "{up} rounded up is below {value}");
+        prop_assert!(zero.abs() <= value.abs(), "{zero} is further out than {value}");
+        prop_assert!(away.abs() >= value.abs(), "{away} is closer in than {value}");
+        prop_assert!(down <= zero && zero <= up, "{zero} outside [{down}, {up}]");
+        prop_assert!(down <= away && away <= up, "{away} outside [{down}, {up}]");
+    }
+
+    /// A nearest strategy takes the closer of the two steps the directed ones
+    /// name, and only a tie separates the pair: away-from-zero takes the outer
+    /// step, nearest-even the step with the even quotient.
+    #[test]
+    fn test_the_nearest_strategies_take_the_closer_step(
+        raw in MIN_RAW / 2..=MAX_RAW / 2,
+        step in 1_i128..=MAX_STEP,
+    ) {
+        let (value, step) = (Dec::from_raw(raw), Dec::from_raw(step));
+        let down = value.round_to_step_with(step, RoundingStrategy::ToNegativeInfinity);
+        let up = value.round_to_step_with(step, RoundingStrategy::ToPositiveInfinity);
+        let below = value.into_raw() - down.into_raw();
+        let above = up.into_raw() - value.into_raw();
+        let nearest = value.round_to_step_with(step, RoundingStrategy::MidpointAwayFromZero);
+        let even = value.round_to_step_with(step, RoundingStrategy::MidpointNearestEven);
+
+        if below == 0 {
+            // already on the grid, where there is nothing to resolve
+            prop_assert_eq!(down, up, "{} sits between two steps", value);
+            for strategy in STRATEGIES {
+                prop_assert_eq!(
+                    value.round_to_step_with(step, strategy),
+                    value,
+                    "{} moved under {:?}",
+                    value,
+                    strategy
+                );
+            }
+        } else if below == above {
+            let outer = match value.is_sign_negative() {
+                true => down,
+                false => up,
+            };
+            prop_assert_eq!(nearest, outer, "the tie on {} went the wrong way", value);
+            prop_assert_eq!(
+                (even.into_raw() / step.into_raw()) % 2,
+                0,
+                "the tie on {} landed on the odd step {}",
+                value,
+                even
+            );
+        } else {
+            let nearer = match below < above {
+                true => down,
+                false => up,
+            };
+            prop_assert_eq!(nearest, nearer, "{} took the further step", value);
+            prop_assert_eq!(even, nearer, "{} took the further step", value);
+        }
+    }
+
+    /// Rounding twice under one strategy changes nothing the second time.
+    #[test]
+    fn test_every_strategy_is_idempotent(value in any_dec(), dp in 0_u32..=Dec::SCALE) {
+        for strategy in STRATEGIES {
+            let once = value.round_dp_with(dp, strategy);
+            prop_assert_eq!(
+                once.round_dp_with(dp, strategy),
+                once,
+                "{} at {} places under {:?}",
+                value,
+                dp,
+                strategy
+            );
+        }
+    }
+
+    /// At `dp` 0 the three towards-something strategies are the whole-number
+    /// methods, which reach the answer by other arithmetic entirely: `floor`
+    /// divides euclidean and `trunc` divides truncating, and neither goes
+    /// anywhere near the strategy applier.
+    #[test]
+    fn test_the_zero_place_strategies_are_floor_ceil_and_trunc(value in any_dec()) {
+        prop_assert_eq!(
+            value.round_dp_with(0, RoundingStrategy::ToNegativeInfinity),
+            value.floor(),
+            "the floor of {}",
+            value
+        );
+        prop_assert_eq!(
+            value.round_dp_with(0, RoundingStrategy::ToPositiveInfinity),
+            value.ceil(),
+            "the ceiling of {}",
+            value
+        );
+        prop_assert_eq!(
+            value.round_dp_with(0, RoundingStrategy::ToZero),
+            value.trunc(),
+            "the whole part of {}",
+            value
+        );
+    }
+
+    /// NaN survives every strategy, on either method and from either side.
+    #[test]
+    fn test_nan_survives_every_strategy(value in finite(), dp in 0_u32..=Dec::SCALE) {
+        for strategy in STRATEGIES {
+            prop_assert!(Dec::NAN.round_dp_with(dp, strategy).is_nan(), "{strategy:?}");
+            prop_assert!(
+                Dec::NAN.round_to_step_with(value, strategy).is_nan(),
+                "{strategy:?}"
+            );
+            prop_assert!(
+                value.round_to_step_with(Dec::NAN, strategy).is_nan(),
+                "{strategy:?}"
+            );
+        }
+    }
+}
+
 // -- the f64 conversions -----------------------------------------------------
 
 proptest! {
@@ -744,5 +1008,99 @@ proptest! {
         if values.contains(&Dec::NAN) {
             prop_assert_eq!(sorted.first(), Some(&Dec::NAN));
         }
+    }
+}
+
+// -- the square root ---------------------------------------------------------
+
+proptest! {
+    #![proptest_config(config())]
+
+    /// The root against the standard library's, which is correctly rounded and
+    /// shares no code with anything here. The tolerance carries both roundings:
+    /// half a unit in the last place at the bottom, where eighteen places run
+    /// out before the double does, and the double's own relative error at the
+    /// top, where a root reaches 1.3e10.
+    #[test]
+    fn test_the_root_matches_the_standard_library(value in non_negative()) {
+        let mine = value.sqrt().to_f64();
+        let theirs = value.to_f64().sqrt();
+        let tolerance = 1e-18 + theirs * 1e-14;
+        prop_assert!(
+            (mine - theirs).abs() <= tolerance,
+            "sqrt({value}) gave {mine}, the standard library {theirs}"
+        );
+    }
+
+    /// A square built from nine decimal places has an exact root, and it is the
+    /// value it was built from. This is the one case where the answer is known
+    /// without computing it, so it pins the rounding to the value rather than
+    /// to a neighbour half a unit away.
+    #[test]
+    fn test_an_exact_square_returns_the_value_it_came_from(value in exactly_squarable()) {
+        let square = value * value;
+        prop_assert!(square.is_finite(), "{value} squared left the range");
+        prop_assert_eq!(square.sqrt(), value, "sqrt({}) missed {}", square, value);
+    }
+
+    /// The root preserves the ordering, which the two paths have to agree on
+    /// across the threshold as well as within each side of it.
+    #[test]
+    fn test_the_root_is_monotonic(a in non_negative(), b in non_negative()) {
+        // non-decreasing rather than strict: near the top of the range the
+        // root moves by one unit for every 2.6e10 the value moves, so
+        // neighbours share a root and only the direction is guaranteed
+        let (low, high) = match a <= b {
+            true => (a, b),
+            false => (b, a),
+        };
+        prop_assert!(low.sqrt() <= high.sqrt(), "sqrt({low}) exceeds sqrt({high})");
+    }
+
+    /// Nothing in the domain produces a NaN, and everything outside it does.
+    /// The root cannot overflow, so those are its only two outcomes.
+    #[test]
+    fn test_the_root_is_finite_on_its_domain_and_nan_off_it(value in any_dec()) {
+        match value.is_finite() && value >= Dec::ZERO {
+            true => {
+                prop_assert!(value.sqrt().is_finite(), "sqrt({value}) was not finite");
+                prop_assert!(value.checked_sqrt().is_some(), "sqrt({value}) reported failure");
+            }
+            false => {
+                prop_assert!(value.sqrt().is_nan(), "sqrt({value}) was not NaN");
+                prop_assert_eq!(value.checked_sqrt(), None);
+            }
+        }
+    }
+
+    /// The approximate root keeps the double's sixteen significant digits, so
+    /// its drift is a share of the root rather than a fixed number of units in
+    /// the last place. The bound scales with the root for that reason, and has
+    /// a floor for the roots that eighteen places measure more coarsely than
+    /// the double does.
+    #[test]
+    fn test_the_approximate_root_keeps_the_doubles_digits(value in non_negative()) {
+        let (exact, approx) = (value.sqrt(), value.sqrt_approx());
+        let allowed = exact * Dec::from_raw(1_000) + Dec::from_raw(1_000);
+        prop_assert!(
+            (approx - exact).abs() <= allowed,
+            "sqrt({value}) drifted from {exact} to {approx}"
+        );
+    }
+
+    /// Both roots refuse the same inputs. The approximate one takes the
+    /// negative case itself rather than letting an IEEE NaN arrive through the
+    /// conversions, and this is what pins the two together.
+    #[test]
+    fn test_both_roots_share_a_domain(value in any_dec()) {
+        prop_assert_eq!(value.sqrt().is_nan(), value.sqrt_approx().is_nan());
+    }
+
+    /// `sqrt` and `checked_sqrt` are the same function, one reporting failure
+    /// as NaN and the other as `None`.
+    #[test]
+    fn test_the_root_and_its_checked_counterpart_agree(value in any_dec()) {
+        let checked = value.checked_sqrt();
+        prop_assert_eq!(value.sqrt(), checked.unwrap_or(Dec::NAN));
     }
 }

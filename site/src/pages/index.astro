@@ -1,82 +1,33 @@
 ---
-import BarCard from "@/components/BarCard";
-import Provenance from "@/components/Provenance.astro";
-import SummaryTable from "@/components/SummaryTable";
-import Sweep from "@/components/Sweep";
-import {
-  COLOR,
-  IMPLEMENTATIONS,
-  present,
-  presentSweeps,
-  snapshot,
-  sweepSeries,
-  timings,
-} from "@/lib/bench";
 import Base from "@/layouts/Base.astro";
+import { href, NAV } from "@/lib/nav";
 
-const table = timings(snapshot);
 const description =
-  "How Dec compares with rust_decimal, fastnum and native f64 across the " +
-  "arithmetic a trading system runs on a hot path.";
+  "Superfast primitives and data structures for high frequency trading: Dec, " +
+  "a fixed-scale decimal for exact arithmetic, and OrderBook, a level 2 book " +
+  "built on it.";
 ---
 
-<Base title="Arithmetic benchmarks" description={description}>
+<Base title="Primitives for high frequency trading" description={description}>
   <header>
-    <h1>Arithmetic benchmarks</h1>
+    <h1>troy</h1>
     <p class="lede">
-      How <code>Dec</code> compares with <code>rust_decimal</code>, <code
-        >fastnum</code
-      > and native <code>f64</code> across the operations a trading system runs on
-      a hot path. Every number is nanoseconds for one operation, taken as the median
-      over {snapshot.count.toLocaleString("en-US")} values.
+      Superfast primitives and data structures for high frequency trading, where
+      every nanosecond counts. <code>Dec</code> is a fixed-scale decimal backed
+      by an <code>i128</code>, exact inside its range and collapsing to a single
+      NaN state outside it. <code>OrderBook</code> is a level 2 book built on it,
+      each side kept best first so the best price, the n-th level and the depth
+      cut are index arithmetic rather than searches.
     </p>
-    <Provenance machine={snapshot.machine} />
   </header>
 
-  <h2>Per operation</h2>
-  <p>
-    Each chart is scaled to its own slowest bar, so a chart shows who wins that
-    operation and by how much, not how operations compare with each other.
-    <code>f64</code> is drawn in grey because it is the inexact reference, not a
-    decimal competing on correctness.
-  </p>
-  <div class="legend">
+  <nav class="pills" aria-label="Sections">
     {
-      IMPLEMENTATIONS.map((name) => (
-        <span>
-          <i class="swatch" style={`background:${COLOR[name]}`} />
-          {name}
-          {name === "f64" ? " — inexact reference" : ""}
-        </span>
+      NAV.map((item) => (
+        <a class="pill" href={href(item.path)}>
+          {item.full ?? item.label}
+        </a>
       ))
     }
-  </div>
-  <div class="cards">
-    {
-      present(snapshot).map(({ operation, caption }) => (
-        <BarCard operation={operation} caption={caption} table={table} />
-      ))
-    }
-  </div>
-
-  {
-    presentSweeps(snapshot).map(({ operation, heading, axis, note }) => (
-      <>
-        <h2>{heading}</h2>
-        <p>{note}</p>
-        <div class="card">
-          <Sweep
-            series={sweepSeries(operation, snapshot)}
-            order={IMPLEMENTATIONS}
-            axis={axis}
-            label={`${operation} against digit width`}
-          />
-        </div>
-      </>
-    ))
-  }
-
-  <h2>Summary</h2>
-  <p>The same numbers as one table.</p>
-  <SummaryTable snapshot={snapshot} />
+  </nav>
 </Base>

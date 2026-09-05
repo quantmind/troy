@@ -6,7 +6,7 @@ help:
 
 .PHONY: bench
 bench:			## run the criterion benchmarks
-	@cargo bench --bench arithmetic
+	@cargo bench --bench dec
 	@cargo bench --bench orderbook
 
 .PHONY: bench-report

@@ -1,11 +1,14 @@
-//! Multiplication and division checked against an exact 256-bit reference.
+//! Multiplication, division and the square root checked against an exact
+//! 256-bit reference.
 //!
-//! `mul_raw` computes `a * b / 10^18` and `div_raw` computes `a * 10^18 / b`.
-//! Neither intermediate product fits a `u128` - the first needs 256 bits, the
-//! second 188 - and reaching the answer in steps that do is the whole reason
-//! those two modules are shaped the way they are: the modular inverse, the
-//! `10^9` chunking, the three-way split between the fast, chunked and bit-walk
-//! paths. Their own tests check those paths against each other, which cannot
+//! `mul_raw` computes `a * b / 10^18`, `div_raw` computes `a * 10^18 / b`, and
+//! the root is taken over `a * 10^18`. No such intermediate fits a `u128` -
+//! 256 bits for the first, 188 for the second, 187 for the third - and
+//! reaching the answer in steps that do is the whole reason those modules are
+//! shaped the way they are: the modular inverse, the `10^9` chunking, the
+//! three-way split between the fast, chunked and bit-walk paths, and the
+//! comparison that settles a squaring without ever performing one. Their own
+//! tests check those paths against each other, which cannot
 //! catch a mistake shared by all of them, because every path funnels through
 //! the same rounding helper and the same `divide first, scale the remainder`
 //! premise.
@@ -99,6 +102,37 @@ impl U256 {
             }
         }
         Self(limbs)
+    }
+
+    /// The integer square root, two bits of the radicand at a time: the same
+    /// restoring shape as `divmod`, and correct for the same visible reason.
+    /// It shares nothing with the crate's root but the answer.
+    fn isqrt(self) -> Self {
+        let Some(top) = self.highest_bit() else {
+            return Self::ZERO;
+        };
+        let mut root = Self::ZERO;
+        let mut remainder = Self::ZERO;
+        for pair in (0..=top / 2).rev() {
+            // bring down the next two bits
+            remainder = remainder.shl1();
+            if self.bit(pair * 2 + 1) {
+                remainder = remainder.set_low_bit();
+            }
+            remainder = remainder.shl1();
+            if self.bit(pair * 2) {
+                remainder = remainder.set_low_bit();
+            }
+            // the next digit of the root is a one exactly when what it would
+            // subtract, `2 * root + 1`, still fits in the remainder
+            root = root.shl1();
+            let candidate = root.shl1().set_low_bit();
+            if remainder >= candidate {
+                remainder = remainder.sub(candidate);
+                root = root.set_low_bit();
+            }
+        }
+        root
     }
 }
 
@@ -197,6 +231,25 @@ fn oracle_div(a: i128, b: i128) -> Option<i128> {
         (a < 0) != (b < 0),
         round_div(scaled, U256::from_u128(b.unsigned_abs())),
     )
+}
+
+/// What `Dec::checked_sqrt` should return, in raws.
+fn oracle_sqrt(a: i128) -> Option<i128> {
+    // i128::MIN is the NaN pattern, and every negative value answers the same
+    // way: there is no root here to return
+    if a < 0 {
+        return None;
+    }
+    let scaled = mul_u128(a.unsigned_abs(), ONE);
+    let root = scaled.isqrt().to_u128()?;
+    // half away from zero, which on a magnitude is up. The remainder passing
+    // the root is the same test as `a * 10^18 >= root^2 + root + 1`, and no
+    // input can land on the tie itself.
+    let rounded = match scaled.sub(mul_u128(root, root)) > U256::from_u128(root) {
+        true => root + 1,
+        false => root,
+    };
+    finish(false, U256::from_u128(rounded))
 }
 
 // -- inputs ------------------------------------------------------------------
@@ -308,6 +361,8 @@ fn test_every_pair_of_boundary_raws_matches_the_reference() {
     // or a range check goes wrong, and they are far too sparse to be drawn
     let raws = boundary_raws();
     for &a in &raws {
+        let root = Dec::from_raw(a).checked_sqrt();
+        assert_eq!(root.map(Dec::into_raw), oracle_sqrt(a), "sqrt {a}");
         for &b in &raws {
             let product = Dec::from_raw(a).checked_mul(Dec::from_raw(b));
             assert_eq!(product.map(Dec::into_raw), oracle_mul(a, b), "{a} * {b}");
@@ -340,4 +395,34 @@ fn test_the_random_raws_reach_every_division_path() {
     assert!(cancelled > floor, "only {cancelled} cancelled the scaling");
     assert!(chunked > floor, "only {chunked} took the 10^9 steps");
     assert!(bit_walk > floor, "only {bit_walk} took the bit walk");
+}
+
+#[test]
+fn test_the_square_root_matches_the_reference() {
+    let mut rng = Xorshift(0x0bad_c0de_1234_5678);
+    for _ in 0..RANDOM_CASES {
+        let a = rng.raw();
+        let root = Dec::from_raw(a).checked_sqrt();
+        assert_eq!(root.map(Dec::into_raw), oracle_sqrt(a), "sqrt {a}");
+    }
+}
+
+#[test]
+fn test_the_random_raws_reach_both_square_root_paths() {
+    // the root splits where `raw * 10^18` stops fitting a u128, at a value of
+    // about 340, and agreement above the split says nothing about below it
+    const SIMPLE_MAX: u128 = u128::MAX / ONE;
+
+    let mut rng = Xorshift(0x0bad_c0de_1234_5678);
+    let (mut simple, mut wide) = (0, 0);
+    for _ in 0..RANDOM_CASES {
+        match rng.raw() {
+            negative if negative < 0 => continue,
+            small if small as u128 <= SIMPLE_MAX => simple += 1,
+            _ => wide += 1,
+        }
+    }
+    let floor = RANDOM_CASES / 100;
+    assert!(simple > floor, "only {simple} took the simple path");
+    assert!(wide > floor, "only {wide} took the wide path");
 }

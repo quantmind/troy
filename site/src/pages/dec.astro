@@ -1,0 +1,82 @@
+---
+import BarCard from "@/components/BarCard";
+import Provenance from "@/components/Provenance.astro";
+import SummaryTable from "@/components/SummaryTable";
+import Sweep from "@/components/Sweep";
+import {
+  COLOR,
+  IMPLEMENTATIONS,
+  present,
+  presentSweeps,
+  snapshot,
+  sweepSeries,
+  timings,
+} from "@/lib/bench";
+import Base from "@/layouts/Base.astro";
+
+const table = timings(snapshot);
+const description =
+  "How Dec compares with rust_decimal, fastnum and native f64 across the " +
+  "arithmetic a trading system runs on a hot path.";
+---
+
+<Base title="Dec benchmarks" description={description}>
+  <header>
+    <h1>Dec benchmarks</h1>
+    <p class="lede">
+      How <code>Dec</code> compares with <code>rust_decimal</code>, <code
+        >fastnum</code
+      > and native <code>f64</code> across the operations a trading system runs on
+      a hot path. Every number is nanoseconds for one operation, taken as the median
+      over {snapshot.count.toLocaleString("en-US")} values.
+    </p>
+    <Provenance machine={snapshot.machine} />
+  </header>
+
+  <h2>Per operation</h2>
+  <p>
+    Each chart is scaled to its own slowest bar, so a chart shows who wins that
+    operation and by how much, not how operations compare with each other.
+    <code>f64</code> is drawn in grey because it is the inexact reference, not a
+    decimal competing on correctness.
+  </p>
+  <div class="legend">
+    {
+      IMPLEMENTATIONS.map((name) => (
+        <span>
+          <i class="swatch" style={`background:${COLOR[name]}`} />
+          {name}
+          {name === "f64" ? " — inexact reference" : ""}
+        </span>
+      ))
+    }
+  </div>
+  <div class="cards">
+    {
+      present(snapshot).map(({ operation, caption }) => (
+        <BarCard operation={operation} caption={caption} table={table} />
+      ))
+    }
+  </div>
+
+  {
+    presentSweeps(snapshot).map(({ operation, heading, axis, note }) => (
+      <>
+        <h2>{heading}</h2>
+        <p>{note}</p>
+        <div class="card">
+          <Sweep
+            series={sweepSeries(operation, snapshot)}
+            order={IMPLEMENTATIONS}
+            axis={axis}
+            label={`${operation} against digit width`}
+          />
+        </div>
+      </>
+    ))
+  }
+
+  <h2>Summary</h2>
+  <p>The same numbers as one table.</p>
+  <SummaryTable snapshot={snapshot} />
+</Base>
