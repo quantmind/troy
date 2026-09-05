@@ -59,8 +59,8 @@ So a release is four steps, in this order:
 
 Never commit during a release. Do steps 1 and 2, then stop and show the release
 notes for approval: they are published verbatim as the GitHub Release body and
-cannot be revised for a version once it is out. Committing is step 3, and it is
-Luca's to run.
+cannot be revised for a version once it is out.
+Committing is step 3, and it is always the human to run.
 
 ### Release notes
 
