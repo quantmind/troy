@@ -262,6 +262,9 @@ impl Dec {
 
     /// The largest whole number at or below this value, or [`Dec::NAN`] when
     /// that leaves the finite range, as it does for [`Dec::MIN`].
+    ///
+    /// The `dp` 0 case of
+    /// [`RoundingStrategy::ToNegativeInfinity`](crate::RoundingStrategy).
     #[inline(always)]
     pub const fn floor(self) -> Self {
         // NaN needs no test of its own: flooring 2^127 rounds away from zero,
@@ -271,6 +274,9 @@ impl Dec {
 
     /// The smallest whole number at or above this value, or [`Dec::NAN`] when
     /// that leaves the finite range, as it does for [`Dec::MAX`].
+    ///
+    /// The `dp` 0 case of
+    /// [`RoundingStrategy::ToPositiveInfinity`](crate::RoundingStrategy).
     #[inline(always)]
     pub const fn ceil(self) -> Self {
         // ceil(x) = -floor(-x). Wrapping negation maps NaN to itself and every
@@ -281,6 +287,9 @@ impl Dec {
 
     /// The whole part, rounding towards zero. Always finite for a finite
     /// input; [`Dec::NAN`] stays NaN.
+    ///
+    /// The `dp` 0 case of
+    /// [`RoundingStrategy::ToZero`](crate::RoundingStrategy).
     #[inline(always)]
     pub const fn trunc(self) -> Self {
         match self.is_nan() {
@@ -427,25 +436,6 @@ const fn div_round_i64(numerator: i64, divisor: i64) -> i64 {
     let remainder = numerator % divisor;
     let magnitude = if remainder < 0 { -remainder } else { remainder };
     if magnitude * 2 < divisor {
-        return quotient;
-    }
-    if numerator < 0 {
-        quotient.saturating_sub(1)
-    } else {
-        quotient.saturating_add(1)
-    }
-}
-
-pub(crate) const fn div_round(numerator: i128, divisor: i128) -> i128 {
-    let quotient = numerator / divisor;
-    let remainder = numerator % divisor;
-    if remainder == 0 {
-        return quotient;
-    }
-    let magnitude = if remainder < 0 { -remainder } else { remainder };
-    let half = divisor / 2;
-    let round_away = magnitude > half || (magnitude == half && divisor & 1 == 0);
-    if !round_away {
         return quotient;
     }
     if numerator < 0 {

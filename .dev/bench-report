@@ -37,6 +37,8 @@ OPERATIONS = [
     "add",
     "mul",
     "div",
+    "sqrt",
+    "sqrt_approx",
     "round_dp",
     "round_to_step",
     "floor",
@@ -171,8 +173,15 @@ def render_table(snapshot: dict) -> str:
     width = max(len(operation) for operation in rows) + 2
 
     lines = [""]
-    for key, label in (("cpu", "cpu"), ("rustc", "rustc"), ("commit", "commit")):
-        lines.append(f"{label:>7}: {snapshot['machine'][key]}")
+    for key, label in (
+        ("cpu", "cpu"),
+        ("rustc", "rustc"),
+        ("commit", "commit"),
+        ("measured", "measured"),
+    ):
+        # `.get`, because a snapshot recorded before a field existed is still
+        # worth printing the rest of
+        lines.append(f"{label:>8}: {snapshot['machine'].get(key, '-')}")
     lines.append("\nns per operation\n")
 
     header = "op".ljust(width) + "".join(name.rjust(14) for name in IMPLEMENTATIONS)
@@ -203,7 +212,7 @@ def save(run_first: bool) -> None:
         # target/criterion, so running a subset would mix fresh numbers with
         # whatever a previous session left behind and call the result one
         # measurement
-        for bench in ("arithmetic", "orderbook"):
+        for bench in ("dec", "orderbook"):
             command = ["cargo", "bench", "--bench", bench]
             print(" ".join(command), file=sys.stderr)
             if subprocess.run(command, cwd=ROOT).returncode != 0:

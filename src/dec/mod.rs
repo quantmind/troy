@@ -9,9 +9,11 @@ mod parse;
 mod round;
 #[cfg(feature = "serde")]
 mod serde;
+mod sqrt;
 
 pub use core::Dec;
 pub use parse::ParseDecError;
+pub use round::RoundingStrategy;
 
 /// Builds a [`Dec`] from a decimal literal at compile time.
 ///

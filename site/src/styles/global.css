@@ -27,6 +27,10 @@
   --dec: #2a78d6;
   --rust-decimal: #eb6834;
   --fastnum: #1baf7a;
+  --rank-1: #1a7f4b;
+  --rank-2: #1f5fbf;
+  --rank-3: #946d0c;
+  --rank-4: #9e1b16;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -44,6 +48,10 @@
     --dec: #3987e5;
     --rust-decimal: #d95926;
     --fastnum: #199e70;
+    --rank-1: #31ac72;
+    --rank-2: #5090e4;
+    --rank-3: #b09220;
+    --rank-4: #d4635b;
   }
 }
 
@@ -61,6 +69,10 @@
   --dec: #3987e5;
   --rust-decimal: #d95926;
   --fastnum: #199e70;
+  --rank-1: #31ac72;
+  --rank-2: #5090e4;
+  --rank-3: #b09220;
+  --rank-4: #d4635b;
 }
 
 /* Expose the palette to Tailwind so a new page can reach for `bg-surface` or
@@ -81,16 +93,30 @@
 /* ------------------------------------------------------------------------
  * Shell
  */
+/* Fluid type. Every size below is in rem, so this one declaration sets the
+ * scale of the page. The floor is the browser default, which is what the site
+ * has always rendered at, so a laptop window is unchanged; past 1000px the
+ * whole page grows with the viewport and stops at 20px, because beyond that a
+ * wide screen should be gaining text rather than only margin.
+ *
+ * Anchored on rem plus an overshoot rather than a bare vw: a viewport-only
+ * formula ignores browser zoom and a reader who has set a larger default, and
+ * both have to keep working.
+ */
+html {
+  font-size: clamp(1rem, calc(1rem + (100vw - 1000px) * 0.0075), 1.25rem);
+}
+
 body {
   margin: 0;
   background: var(--plane);
   color: var(--ink);
-  font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+  font: 0.9375rem/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 .wrap {
-  max-width: 1080px;
+  max-width: 67.5rem;
   margin: 0 auto;
-  padding: 26px 24px 96px;
+  padding: 1.625rem 1.5rem 6rem;
 }
 
 nav.top {
@@ -99,7 +125,7 @@ nav.top {
   gap: 4px;
   flex-wrap: wrap;
   margin-bottom: 30px;
-  font-size: 13.5px;
+  font-size: 0.84375rem;
 }
 nav.top a {
   color: var(--ink-soft);
@@ -145,7 +171,7 @@ nav.top .divider {
   height: 28px;
   cursor: pointer;
   line-height: 1;
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .theme-toggle:hover {
   color: var(--ink);
@@ -153,17 +179,17 @@ nav.top .divider {
 
 header {
   border-bottom: 1px solid var(--rule);
-  padding-bottom: 28px;
+  padding-bottom: 1.75rem;
 }
 h1 {
-  font-size: 30px;
+  font-size: 1.875rem;
   line-height: 1.2;
   margin: 0 0 8px;
   letter-spacing: -0.02em;
 }
 .lede {
   margin: 0;
-  max-width: 62ch;
+  max-width: 80ch;
   color: var(--ink-soft);
 }
 .provenance {
@@ -171,7 +197,7 @@ h1 {
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 20px;
-  font-size: 12.5px;
+  font-size: 0.78125rem;
   color: var(--ink-soft);
 }
 .chip {
@@ -185,16 +211,43 @@ h1 {
   font-weight: 500;
 }
 
+/* ------------------------------------------------------------------------
+ * Front page
+ *
+ * The front page is a hub and its links are the whole of it, so they are sized
+ * to be the content rather than an aside under it.
+ */
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 28px 0 0;
+}
+.pill {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 10px 20px;
+  font-size: 0.90625rem;
+  font-weight: 500;
+  color: var(--ink);
+  text-decoration: none;
+}
+.pill:hover {
+  border-color: var(--dec);
+  color: var(--dec);
+}
+
 h2 {
-  font-size: 19px;
+  font-size: 1.1875rem;
   margin: 48px 0 6px;
   letter-spacing: -0.01em;
 }
 h2 + p {
   margin: 0 0 20px;
   color: var(--ink-soft);
-  max-width: 62ch;
-  font-size: 14px;
+  max-width: 80ch;
+  font-size: 0.875rem;
 }
 
 .legend {
@@ -202,7 +255,7 @@ h2 + p {
   flex-wrap: wrap;
   gap: 18px;
   margin: 0 0 24px;
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .legend span {
   display: flex;
@@ -225,26 +278,26 @@ h2 + p {
  */
 .cards {
   display: grid;
-  gap: 14px;
-  grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+  gap: 0.875rem;
+  grid-template-columns: repeat(auto-fill, minmax(19.375rem, 1fr));
 }
 .cards.wide {
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(22.5rem, 1fr));
 }
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 15px 16px 13px;
+  padding: 0.9375rem 1rem 0.8125rem;
 }
 .card h3 {
   margin: 0;
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
 }
 .card .caption {
   margin: 1px 0 13px;
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--ink-muted);
 }
 
@@ -255,10 +308,10 @@ h2 + p {
 }
 .bar-row {
   display: grid;
-  grid-template-columns: 88px 1fr auto;
+  grid-template-columns: 5.5rem 1fr auto;
   align-items: center;
-  gap: 10px;
-  font-size: 12px;
+  gap: 0.625rem;
+  font-size: 0.75rem;
 }
 .bar-name {
   color: var(--ink-soft);
@@ -268,7 +321,7 @@ h2 + p {
    chart is read on its own scale: cmp at 4ns and parse at 100ns do not
    share an axis */
 .track {
-  height: 13px;
+  height: 0.8125rem;
   border-radius: 3px;
   position: relative;
 }
@@ -284,7 +337,7 @@ h2 + p {
 .bar-value {
   font-variant-numeric: tabular-nums;
   color: var(--ink-soft);
-  min-width: 62px;
+  min-width: 3.875rem;
   text-align: right;
 }
 .absent {
@@ -331,14 +384,20 @@ h2 + p {
 table {
   border-collapse: collapse;
   width: 100%;
-  font-size: 13.5px;
+  font-size: 0.84375rem;
 }
 caption {
-  caption-side: bottom;
-  padding-top: 12px;
+  /* above the table: the unit belongs where the numbers are read, not in a
+     footnote after them */
+  caption-side: top;
+  padding-bottom: 10px;
   color: var(--ink-muted);
-  font-size: 12.5px;
+  font-size: 0.875rem;
   text-align: left;
+}
+caption strong {
+  color: var(--ink);
+  font-weight: 600;
 }
 th,
 td {
@@ -349,7 +408,7 @@ thead th {
   text-align: right;
   font-weight: 600;
   color: var(--ink-soft);
-  font-size: 12.5px;
+  font-size: 0.78125rem;
 }
 thead th:first-child,
 tbody th {
@@ -362,14 +421,31 @@ td {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+/* Rank within the row, fastest to slowest. The numbers already carry the
+   comparison; the colour only makes the ordering visible at a glance, and the
+   star, the fixed column order and the caption carry it for anyone the hues do
+   not separate. The steps are validated against both surfaces for text
+   contrast and colour-vision separation, so they are not interchangeable with
+   the identity hues above. */
+td.rank-1 {
+  color: var(--rank-1);
+}
+td.rank-2 {
+  color: var(--rank-2);
+}
+td.rank-3 {
+  color: var(--rank-3);
+}
+td.rank-4 {
+  color: var(--rank-4);
+}
 td.best {
   font-weight: 650;
-  color: var(--ink);
 }
 td.best::after {
   content: " \2605";
   color: var(--ink-muted);
-  font-size: 10px;
+  font-size: 0.625rem;
 }
 td.none {
   color: var(--ink-muted);
@@ -382,13 +458,13 @@ td.none {
  * Prose, for the pages rendered from docs/*.md
  */
 .prose {
-  max-width: 72ch;
+  max-width: 84ch;
 }
 .prose h2 {
   margin: 40px 0 10px;
 }
 .prose h3 {
-  font-size: 15.5px;
+  font-size: 0.96875rem;
   margin: 28px 0 8px;
 }
 .prose p,
@@ -446,7 +522,7 @@ code {
   padding: 13px 15px;
   overflow-x: auto;
   margin: 0 0 16px;
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.5;
 }
 
@@ -457,7 +533,7 @@ footer {
   margin-top: 56px;
   padding-top: 20px;
   border-top: 1px solid var(--rule);
-  font-size: 13px;
+  font-size: 0.8125rem;
   color: var(--ink-soft);
 }
 footer a {
@@ -478,7 +554,7 @@ footer .links {
   border: 1px solid var(--border);
   border-radius: 7px;
   padding: 7px 10px;
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.45;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.13);
   font-variant-numeric: tabular-nums;
@@ -486,7 +562,7 @@ footer .links {
 }
 #tip b {
   display: block;
-  font-size: 12.5px;
+  font-size: 0.78125rem;
 }
 #tip span {
   color: var(--ink-muted);

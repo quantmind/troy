@@ -9,7 +9,7 @@ use rust_decimal::prelude::*;
 use std::hint::black_box;
 use std::str::FromStr;
 use std::time::Duration;
-use troy::Dec;
+use troy::{Dec, RoundingStrategy};
 
 const COUNT: usize = 1_024;
 
@@ -364,6 +364,68 @@ fn config() -> Criterion {
         .sample_size(20)
 }
 
+// The root splits at a value of about 340, below which `raw * 10^18` still
+// fits a u128 and the standard library's integer root answers directly. Prices
+// sit above the split and take the wide path, which is the one worth
+// publishing: it is what a price costs.
+//
+// `sqrt_approx` is its own group rather than a fifth series here: it is a
+// different operation, not a fifth implementation of this one, and only `Dec`
+// and `f64` have anything to enter for it.
+fn bench_sqrt(c: &mut Criterion) {
+    let (prices, _) = columns();
+    let mut group = c.benchmark_group("sqrt");
+    group.throughput(Throughput::Elements(COUNT as u64));
+
+    group.bench_function(BenchmarkId::new("f64", COUNT), |b| {
+        b.iter(|| {
+            for value in black_box(&prices.floats) {
+                black_box(value.sqrt());
+            }
+        })
+    });
+    group.bench_function(BenchmarkId::new("Dec", COUNT), |b| {
+        b.iter(|| {
+            for value in black_box(&prices.decs) {
+                black_box(value.sqrt());
+            }
+        })
+    });
+    group.bench_function(BenchmarkId::new("rust_decimal", COUNT), |b| {
+        b.iter(|| {
+            for value in black_box(&prices.decimals) {
+                black_box(value.sqrt());
+            }
+        })
+    });
+    group.bench_function(BenchmarkId::new("fastnum", COUNT), |b| {
+        b.iter(|| {
+            for value in black_box(&prices.fastnums) {
+                black_box(value.sqrt());
+            }
+        })
+    });
+    group.finish();
+
+    let mut group = c.benchmark_group("sqrt_approx");
+    group.throughput(Throughput::Elements(COUNT as u64));
+    group.bench_function(BenchmarkId::new("f64", COUNT), |b| {
+        b.iter(|| {
+            for value in black_box(&prices.floats) {
+                black_box(value.sqrt());
+            }
+        })
+    });
+    group.bench_function(BenchmarkId::new("Dec", COUNT), |b| {
+        b.iter(|| {
+            for value in black_box(&prices.decs) {
+                black_box(value.sqrt_approx());
+            }
+        })
+    });
+    group.finish();
+}
+
 fn bench_round_dp(c: &mut Criterion) {
     // the sizes column carries 6 decimals, so rounding to 2 is real work for a
     // scale-carrying type; the prices column has exactly 2 and would be a no-op
@@ -438,6 +500,36 @@ fn bench_round_to_step(c: &mut Criterion) {
         b.iter(|| {
             for value in black_box(&prices.fastnums) {
                 black_box(step_fastnum * (*value / step_fastnum).round(0));
+            }
+        })
+    });
+    group.finish();
+}
+
+// What a strategy the compiler cannot see costs. A literal one folds away, so
+// `round_dp` and `round_to_step` above are already its benchmark: they round
+// the same column with the same loop, by the same code. This is the other
+// case, a policy loaded per instrument, where the match on the strategy is a
+// real branch and the gap against those two is what it costs per value.
+fn bench_round_with_runtime_strategy(c: &mut Criterion) {
+    let (_, sizes) = columns();
+    let step = Dec::from_str("0.01").unwrap();
+    let mut group = c.benchmark_group("round_runtime_strategy");
+    group.throughput(Throughput::Elements(COUNT as u64));
+
+    group.bench_function(BenchmarkId::new("round_dp_with", COUNT), |b| {
+        b.iter(|| {
+            let strategy = black_box(RoundingStrategy::ToZero);
+            for value in black_box(&sizes.decs) {
+                black_box(value.round_dp_with(2, strategy));
+            }
+        })
+    });
+    group.bench_function(BenchmarkId::new("round_to_step_with", COUNT), |b| {
+        b.iter(|| {
+            let strategy = black_box(RoundingStrategy::ToZero);
+            for value in black_box(&sizes.decs) {
+                black_box(value.round_to_step_with(step, strategy));
             }
         })
     });
@@ -714,8 +806,10 @@ criterion_group! {
         bench_add,
         bench_cmp,
         bench_mul_div,
+        bench_sqrt,
         bench_round_dp,
         bench_round_to_step,
+        bench_round_with_runtime_strategy,
         bench_floor,
         bench_ceil,
         bench_f64_boundary,

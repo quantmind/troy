@@ -14,6 +14,11 @@ export default function DepthTable({ snapshot }: { snapshot: Snapshot }) {
   return (
     <div className="scroll">
       <table>
+        <caption>
+          <strong>Nanoseconds per operation</strong> against the depth of one
+          side, median of criterion's samples. The last column is the cost at {deepest} levels
+          over the cost at {shallowest}; ★ marks the operations that stay flat.
+        </caption>
         <thead>
           <tr>
             <th>operation</th>
@@ -55,11 +60,6 @@ export default function DepthTable({ snapshot }: { snapshot: Snapshot }) {
             );
           })}
         </tbody>
-        <caption>
-          Nanoseconds per operation against the depth of one side, median of
-          criterion's samples. The last column is the cost at {deepest} levels
-          over the cost at {shallowest}; ★ marks the operations that stay flat.
-        </caption>
       </table>
     </div>
   );
