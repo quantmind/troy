@@ -11,6 +11,36 @@ Keep entries compact: grouped bullets under `Fixed`, `Added`, `Changed` and
 what a caller does about it. Reasoning belongs in the code, beside the thing it
 explains.
 
+## v0.1.2
+
+Added
+
+- The market types serialise under the `serde` feature: `PriceAmount`,
+  `OrderBookSide`, `OrderBook`, `OrderBookTop` and `OrderBookDiff`. A book
+  snapshot now round trips whole, where before only `Dec` did.
+- `OrderBook::is_consistent` — every level valid, each side ordered the way its
+  slot requires, no price held twice, and a spread above zero. A book built
+  through `set` holds this by construction, so check it on one that arrived
+  another way: deserialised from a snapshot, or assembled by hand.
+- `Display` honours the format spec. A precision rounds to exactly that many
+  places, halves away from zero, padded with zeros past `Dec::SCALE`; width,
+  fill, alignment, `0` and `+` behave as they do on the built-in numeric types.
+  Bare `{}` is unchanged, and still compiles to what it did before.
+- A benchmark and docs site at <https://troy.quantmind.com>, carrying the full
+  benchmark set, the order book numbers, the digit and depth sweeps and the
+  design docs. `make site` builds it, `make site-dev` serves it locally.
+
+Changed
+
+- `{:.N}` spells out a value whose carry leaves the finite range rather than
+  giving up on it: `format!("{:.0}", Dec::MAX)` renders
+  `170141183460469231732`, where `Dec::MAX.round_dp(0)` is `Dec::NAN`.
+
+Removed
+
+- `make bench-page`, which rendered a single page from the snapshot. `make
+  site` builds the whole site instead.
+
 ## v0.1.1
 
 Fixed
