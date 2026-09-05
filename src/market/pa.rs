@@ -2,6 +2,7 @@ use crate::Dec;
 
 /// A struct representing a price and amount pair.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PriceAmount {
     /// The price of the level.
     pub price: Dec,

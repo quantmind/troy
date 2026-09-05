@@ -8,15 +8,8 @@ const DEFAULT_CAPACITY: usize = 64;
 /// Levels are kept best first — descending for bids, ascending for asks — so
 /// the best level, the n-th level and the depth cut are all index arithmetic.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct OrderBookSide {
-    // A vector rather than a deque, measured rather than assumed. A deque
-    // inserts near the front without shifting, which is where a busy venue
-    // adds, and `book_insert` in the benchmarks is 34% faster on one at 512
-    // levels. It buys nothing at the depths a book is actually capped to - one
-    // nanosecond at 32, less than nothing at 8 - and it charges for the ring
-    // arithmetic on every read: 5% on `best_price`, which is the hottest and
-    // cheapest call here, and 4% on an update. A compact book does far more of
-    // those than it does inserts.
     levels: Vec<PriceAmount>,
     desc: bool,
     max_depth: Option<usize>,
@@ -26,6 +19,7 @@ pub struct OrderBookSide {
 ///
 /// Designed to be efficient for high-frequency trading scenarios.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct OrderBook {
     /// The bids side of the order book.
     pub bids: OrderBookSide,
@@ -36,6 +30,7 @@ pub struct OrderBook {
 /// The best bid and ask: the smallest snapshot of a book that still prices a
 /// trade, and what a top-of-book feed carries.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct OrderBookTop {
     /// The best bid.
     pub bid: PriceAmount,
@@ -45,6 +40,7 @@ pub struct OrderBookTop {
 
 /// A batch of level updates to apply to a book.
 #[derive(Clone, Debug, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct OrderBookDiff {
     /// Bid levels to set.
     pub bids: Vec<PriceAmount>,
@@ -87,6 +83,20 @@ impl OrderBookSide {
     /// The level cap this side was built with, or `None` when uncapped.
     pub fn max_depth(&self) -> Option<usize> {
         self.max_depth
+    }
+
+    /// Whether the side holds what [`OrderBookSide::set`] would have left: every
+    /// level valid, and the levels best first — descending for bids, ascending
+    /// for asks, with no price twice.
+    ///
+    /// Nothing here checks this on the way past, because it is what `set`
+    /// maintains and what every read assumes.
+    fn is_consistent(&self) -> bool {
+        self.levels.iter().all(|level| level.is_valid())
+            && self.levels.windows(2).all(|pair| match self.desc {
+                true => pair[0].price > pair[1].price,
+                false => pair[0].price < pair[1].price,
+            })
     }
 
     /// Iterate every level, best first.
@@ -341,6 +351,31 @@ impl OrderBook {
             (Some(bid), Some(ask)) => Some(ask - bid),
             _ => None,
         }
+    }
+
+    /// Whether the book holds together: every level valid, each side ordered
+    /// the way its slot requires, and a spread above zero.
+    ///
+    /// A book built through [`OrderBookSide::set`] is consistent by
+    /// construction, so this is for one that arrived another way — deserialised
+    /// from a snapshot, or assembled by hand — and for asserting the invariant
+    /// in a test. Reads here are index arithmetic and binary searches over
+    /// levels held best first, so a side out of order answers wrongly rather
+    /// than failing, and a level [`PriceAmount::is_valid`] would have turned
+    /// away carries into every statistic taken over the side for as long as it
+    /// stands. This catches both.
+    ///
+    /// An empty side is ordered and a book missing a side has no spread to
+    /// judge, so both are consistent. A crossed book is not, and neither is a
+    /// locked one, where the best bid equals the best ask: the spread must be
+    /// above zero, not merely not below it. A spread that overflowed to
+    /// [`Dec::NAN`] is not above zero either.
+    pub fn is_consistent(&self) -> bool {
+        self.bids.desc
+            && !self.asks.desc
+            && self.bids.is_consistent()
+            && self.asks.is_consistent()
+            && self.spread().is_none_or(Dec::is_sign_positive)
     }
 
     /// Order book imbalance at the top: the pressure the best bid and the best
@@ -1076,5 +1111,133 @@ mod tests {
         book.bids.set_price_amount(dec!(100), dec!(6));
         assert_eq!(book.bids.amount_mean(), Some(5.0));
         assert_eq!(book.bids.amount_std_dev(), Some(1.0));
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_a_book_round_trips_through_serde() {
+        let mut book = OrderBook::new(Some(10));
+        book.bids.set_price_amount(dec!(104_237.25), dec!(3));
+        book.bids.set_price_amount(dec!(104_237.20), dec!(1.5));
+        book.asks.set_price_amount(dec!(104_237.30), dec!(1));
+
+        let encoded = serde_json::to_string(&book).unwrap();
+        let decoded: OrderBook = serde_json::from_str(&encoded).unwrap();
+
+        assert_eq!(decoded.max_depth(), book.max_depth());
+        assert_eq!(decoded.mid_price(), book.mid_price());
+        assert_eq!(decoded.spread(), book.spread());
+        assert!(decoded.bids.iter().eq(book.bids.iter()));
+        assert!(decoded.asks.iter().eq(book.asks.iter()));
+        // the text is stable, so a snapshot written twice compares equal
+        assert_eq!(encoded, serde_json::to_string(&decoded).unwrap());
+    }
+
+    #[test]
+    fn test_a_book_built_through_the_api_is_consistent() {
+        let mut book = OrderBook::new(Some(10));
+        assert!(book.is_consistent(), "an empty book");
+        book.bids.set_price_amount(dec!(100), dec!(1));
+        assert!(book.is_consistent(), "bids only, so no spread to judge");
+        book.asks.set_price_amount(dec!(101), dec!(1));
+        book.bids.set_price_amount(dec!(99), dec!(2));
+        book.asks.set_price_amount(dec!(102), dec!(2));
+        assert!(book.is_consistent());
+    }
+
+    #[test]
+    fn test_a_crossed_or_locked_book_is_not_consistent() {
+        let mut crossed = OrderBook::new(None);
+        crossed.bids.set_price_amount(dec!(101), dec!(1));
+        crossed.asks.set_price_amount(dec!(100), dec!(1));
+        assert_eq!(crossed.spread(), Some(dec!(-1)));
+        assert!(!crossed.is_consistent());
+
+        let mut locked = OrderBook::new(None);
+        locked.bids.set_price_amount(dec!(100), dec!(1));
+        locked.asks.set_price_amount(dec!(100), dec!(1));
+        assert_eq!(locked.spread(), Some(Dec::ZERO));
+        assert!(!locked.is_consistent());
+    }
+
+    #[test]
+    fn test_levels_out_of_order_are_not_consistent() {
+        let mut book = OrderBook::new(None);
+        book.bids.set_price_amount(dec!(100), dec!(1));
+        book.bids.set_price_amount(dec!(99), dec!(1));
+        book.asks.set_price_amount(dec!(101), dec!(1));
+        assert!(book.is_consistent());
+
+        book.bids.levels.reverse();
+        assert!(!book.is_consistent(), "bids no longer descending");
+    }
+
+    #[test]
+    fn test_a_side_sorting_against_its_slot_is_not_consistent() {
+        let mut book = OrderBook::new(None);
+        book.asks.desc = true;
+        assert!(!book.is_consistent(), "asks flagged descending");
+
+        let mut book = OrderBook::new(None);
+        book.bids.desc = false;
+        assert!(!book.is_consistent(), "bids flagged ascending");
+    }
+
+    #[test]
+    fn test_a_spread_that_overflows_is_not_consistent() {
+        let mut book = OrderBook::new(None);
+        book.bids.set_price_amount(Dec::MIN, dec!(1));
+        book.asks.set_price_amount(Dec::MAX, dec!(1));
+        // uncrossed, but the width of it leaves the range and cannot be judged
+        assert!(book.spread().expect("both sides stand").is_nan());
+        assert!(!book.is_consistent());
+    }
+
+    #[test]
+    fn test_a_price_held_twice_is_not_consistent() {
+        let mut book = OrderBook::new(None);
+        book.bids.set_price_amount(dec!(100), dec!(1));
+        book.asks.set_price_amount(dec!(101), dec!(1));
+        assert!(book.is_consistent());
+
+        // `set` is keyed by price and replaces, so a duplicate can only arrive
+        // on a side assembled some other way
+        book.bids.set_price_amount(dec!(100), dec!(5));
+        assert_eq!(book.bids.len(), 1);
+        book.bids.levels.push(PriceAmount {
+            price: dec!(100),
+            amount: dec!(2),
+        });
+        assert!(!book.is_consistent(), "the same price twice");
+    }
+
+    #[test]
+    fn test_a_level_set_would_have_turned_away_is_not_consistent() {
+        let mut book = OrderBook::new(None);
+        book.bids.set_price_amount(dec!(100), dec!(1));
+        book.asks.set_price_amount(dec!(101), dec!(1));
+        assert!(book.is_consistent());
+
+        // `set` rejects these outright, so they can only arrive on a side
+        // assembled some other way — a snapshot read back, or a test
+        for level in [
+            PriceAmount {
+                price: dec!(99),
+                amount: dec!(-1),
+            },
+            PriceAmount {
+                price: dec!(98),
+                amount: Dec::NAN,
+            },
+            PriceAmount {
+                price: Dec::NAN,
+                amount: dec!(1),
+            },
+        ] {
+            let mut book = book.clone();
+            assert_eq!(book.bids.set(level), None, "set takes {level:?}");
+            book.bids.levels.push(level);
+            assert!(!book.is_consistent(), "{level:?} is held");
+        }
     }
 }

@@ -307,6 +307,42 @@ proptest! {
         prop_assert_eq!(text.starts_with('-'), value.is_sign_negative());
     }
 
+    /// A precision emits exactly the places asked for: no stripping, no bare
+    /// point, and the sign still only on a negative value.
+    #[test]
+    fn test_a_precision_emits_exactly_the_places_asked_for(
+        value in finite(),
+        dp in 0_usize..=24,
+    ) {
+        let text = format!("{value:.dp$}");
+        match text.split_once('.') {
+            Some((integer, fraction)) => {
+                prop_assert_ne!(dp, 0, "{} carries a point at zero places", text);
+                prop_assert_eq!(fraction.len(), dp, "{} is not {} places", text, dp);
+                prop_assert!(fraction.bytes().all(|byte| byte.is_ascii_digit()), "{}", text);
+                prop_assert!(!integer.is_empty(), "{} has no integer part", text);
+            }
+            None => prop_assert_eq!(dp, 0, "{} has no point at {} places", text, dp),
+        }
+        prop_assert_eq!(text.starts_with('-'), value.is_sign_negative(), "{}", text);
+    }
+
+    /// A precision rounds the way `round_dp` does. The two share no code: the
+    /// renderer rounds the magnitude as a `u128` on its way to digits, where
+    /// `round_dp` rounds the signed raw and rebuilds a value from it.
+    #[test]
+    fn test_a_precision_rounds_the_way_round_dp_does(
+        value in finite(),
+        dp in 0_u32..=Dec::SCALE,
+    ) {
+        let rounded = value.round_dp(dp);
+        // the top of the range rounds out of it, which the renderer spells out
+        // and `round_dp` answers with NaN
+        prop_assume!(rounded.is_finite());
+        let text = format!("{value:.width$}", width = dp as usize);
+        prop_assert_eq!(Dec::from_str(&text), Ok(rounded), "text {}", text);
+    }
+
     /// The rendering orders the same way the value does, once the sign is
     /// accounted for. A value whose text sorts differently from itself would
     /// break every log, key and comparison built on the string form.
